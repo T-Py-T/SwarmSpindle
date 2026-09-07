@@ -1,1 +1,12 @@
-{"name":"@simpleswarm/swarm","private":true,"type":"module","exports":{".":"./index.ts"}}
+{
+  "name": "@simpleswarm/swarm",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "version": "0.1.0",
+  "dependencies": {
+    "zod": "4.3.6"
+  }
+}

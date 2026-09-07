@@ -46,7 +46,7 @@ export interface WorkerRecord { id: string; pid: number; startedAt: number; hear
 /** Single owner of swarm state. All mutation methods are transactional. */
 export interface SwarmStore {
   close(): void;
-  createSwarm(spec: SwarmSpec): SwarmRecord;
+  createSwarm(spec: SwarmSpec, initialFiles?: FileChange[]): SwarmRecord;
   listSwarms(): SwarmRecord[];
   getSwarm(swarmId: string): SwarmRecord;
   claimNextSwarm(workerId: string): SwarmRecord | null;

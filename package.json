@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "workspaces": ["modules/*"],
+  "workspaces": [
+    "modules/*"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -18,11 +20,22 @@
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@earendil-works/pi-ai": "0.84.1",
     "typebox": "1.3.7",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@simpleswarm/swarm": "workspace:*",
+    "@simpleswarm/sandbox": "workspace:*",
+    "@simpleswarm/runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.3.5",
     "typescript": "5.9.3",
     "@playwright/test": "1.58.2"
+  },
+  "overrides": {
+    "@earendil-works/pi-agent-core": "0.84.1",
+    "@earendil-works/pi-ai": "0.84.1",
+    "@earendil-works/pi-client": "0.84.1",
+    "@earendil-works/pi-protocol": "0.84.1",
+    "@earendil-works/pi-tui": "0.84.1",
+    "@earendil-works/pi-telemetry": "0.84.1"
   }
 }

@@ -1,0 +1,12 @@
+.git
+node_modules
+dist
+tests
+apps
+modules
+docs
+tasks
+prompts
+.env*
+.swarm
+.artifacts
