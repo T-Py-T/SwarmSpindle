@@ -4,7 +4,7 @@
 
 The application passes137 tests/1,025 assertions, typecheck/build and a fresh copied-source installation check. Both requested30-peer swarms ran once in order with exact native Pi models/High settings and original$50 caps. Both failed artifact acceptance: pelican produced a valid but unfinished SVG; canvas produced no final HTML. Confirmed combined challenge usage is$24.805403; uncertain liability remains$54.120000 across the two separate ledgers. Do not clear liabilities or start replacement challenges without new authority. See [acceptance](validation/acceptance.md).
 
-The native independent code review completed and findings were fixed/tested. Live web and worker run on this M4 Max at http://127.0.0.1:5178/. Diagnostics for fetch rejection/incomplete streams passed typecheck and all46 affected runtime tests after the137-case full integration. Publication and a checkout of the public repository remain open. Historical entries below are retained as chronology and are superseded by this current state.
+The native independent code review completed and findings were fixed/tested. Live web and worker run on this M4 Max at http://127.0.0.1:5178/. Diagnostics for fetch rejection/incomplete streams passed typecheck and all46 affected runtime tests after the137-case full integration. Public source and a fresh public checkout are verified at https://github.com/T-Py-T/simpleswarmsystem; see validation/public-delivery.md. Successful challenge acceptance remains incomplete. No more paid requests will be sent without a new budget decision. Historical entries below are retained as chronology and are superseded by this current state.
 
 
 Status: active — application implemented; integration checks passed; independent review and real challenge acceptance pending.

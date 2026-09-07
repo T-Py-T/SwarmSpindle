@@ -4,7 +4,7 @@ A local peer swarm built on [Pi](https://github.com/earendil-works/pi). Agents c
 
 The web service and worker run as separate processes on one Mac. Agent shell commands execute inside rootless Podman containers in a local Linux VM. Closing the browser does not stop the worker.
 
-**Status:** 137 tests and a fresh-install check pass. Both exact-model 30-agent rosters have returned real responses. Both runs ended at their budget guards: the pelican produced an unfinished SVG, and the canvas produced no final artifact. See the [honest challenge results](docs/validation/acceptance.md). See the [delivery ledger](docs/GOAL.md), [requirements](tasks/prd-simple-swarm-system.md), and [validation receipts](docs/validation/first-integration.md).
+**Status:** 137 tests and installation from a fresh public checkout pass. Both exact-model 30-agent rosters have returned real responses. Both runs ended at their budget guards: the pelican produced an unfinished SVG, and the canvas produced no final artifact. See the [honest challenge results](docs/validation/acceptance.md). See the [public delivery receipt](docs/validation/public-delivery.md), [delivery ledger](docs/GOAL.md), [requirements](tasks/prd-simple-swarm-system.md), and [validation receipts](docs/validation/first-integration.md).
 
 ![Dashboard showing synthetic browser-test records](docs/images/dashboard-test-fixture.png)
 

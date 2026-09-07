@@ -20,7 +20,7 @@ Both exact models now have genuine30-peer evidence: the pelican ended budget_exh
 | FR-10 | Names and roster | tests/swarm.test.ts; tests/runtime-tools.test.ts | Passed; genuine peers chose names and coordinated in the pelican and canvas runs. |
 | FR-11 | Threads and incremental inbox | tests/swarm.test.ts; tests/web.test.ts | Passed; pelican retained50 genuine shared messages with incremental inbox/tool activity. |
 | FR-12 | Peer-selected collaboration | modules/runtime/pi-runtime.ts; prompts/demo/ | Genuine pelican peers selected roles and file ownership; duplicated roles and stale coordination limited completion. Canvas also ended budget_exhausted. |
-| FR-13 | Truthful correlated traces | tests/runtime-session-lifecycle.test.ts; tests/browser.test.ts | Passed fixture and genuine live traces; publication excludes private traces/sessions. Final source privacy audit remains required. |
+| FR-13 | Truthful correlated traces | tests/runtime-session-lifecycle.test.ts; tests/browser.test.ts | Passed fixture and genuine live traces; publication excludes private traces/sessions. Final source privacy audit passed. |
 | FR-14 | Read/write/edit/bash | tests/runtime-tools.test.ts; tests/sandbox.integration.test.ts | Passed; real pelican peers used file and isolated shell tools to publish canonical SVG and Chromium render. |
 | FR-15 | Exclusive file claims | tests/swarm.test.ts | 30-connection race, expiry and owner checks passed |
 | FR-16 | Atomic mutation ownership | tests/runtime-tools.test.ts; tests/swarm.test.ts | Structured and shell changeset rejection passed |
@@ -50,9 +50,9 @@ Both exact models now have genuine30-peer evidence: the pelican ended budget_exh
 | FR-40 | 30 GPT-5.5 canvas peers, separate $50 | prompts/demo/USER_PROMPT_CANVAS_FROM_VIDEO.md | Launched after the terminal pelican attempt:30 GPT-5.5 High, separate$50 cap; all 30 actual responses verified; ended budget_exhausted with no final artifact. |
 | FR-41 | Actual canvas and temporal fidelity | docs/research/canvas-reference.md | Two original video frames recovered; continuous original recording unavailable; output comparison pending |
 | FR-42 | Canvas stability and resize | tooling/verify-artifact.ts; prompts/demo/USER_PROMPT_CANVAS_FROM_VIDEO.md | Verifier passed actual isolated animated-canvas22-second/DPR1/2/resize/60-second regressions; genuine canvas output verification remains pending. |
-| FR-43 | Public reproducible delivery | README.md; docs/OPERATIONS.md; LICENSE; bun.lock | Locked install and fresh-data web/worker startup/restart/shutdown passed from a clean source copy. Public Git checkout and publication verification remain pending. |
-| FR-44 | Independent review and PR-only workflows | docs/validation/first-integration.md; root .github inventory | Native independent fixed-source review completed, findings resolved and covered by passing integration. Subsequent sanitized-diagnostic delta independently source-reviewed and tested. No workflows exist; final publication audit pending. |
-| FR-45 | Durable research and task evidence | tasks/; LearningVault/4-Research/Codex/Simple Swarm System/ | Research updates saved and read back; final synchronization pending |
+| FR-43 | Public reproducible delivery | README.md; docs/OPERATIONS.md; LICENSE; bun.lock | Locked install and fresh-data web/worker startup/restart/shutdown passed from a clean source copy. Public Git checkout installation and publication verification passed; see public-delivery.md. |
+| FR-44 | Independent review and PR-only workflows | docs/validation/first-integration.md; root .github inventory | Native independent fixed-source review completed, findings resolved and covered by passing integration. Subsequent sanitized-diagnostic delta independently source-reviewed and tested. No workflows exist; final publication audit passed with no workflow files and zero Actions runs. |
+| FR-45 | Durable research and task evidence | tasks/; LearningVault/4-Research/Codex/Simple Swarm System/ | Research updates saved and read back; delivery outcomes synchronized; successful challenge acceptance remains unmet |
 
 ## Completion checks
 
@@ -65,12 +65,12 @@ Both exact models now have genuine30-peer evidence: the pelican ended budget_exh
 - [x] Compare populated UI screenshots with the original timestamped demo frames and record differences.
 - [x] Complete a fixed-artifact independent review and resolve its findings.
 - [ ] Complete both ordered genuine challenges with actual provider response/activity, immutable per-run ledgers, artifact hashes, and external visual acceptance.
-- [ ] Verify clean-checkout installation and independent startup with a fresh data directory.
-- [ ] Audit the final public file set and PR-only workflow triggers, publish the authorized destination, and inspect remote contents.
-- [ ] Synchronize final research, task, requirement, and goal records.
+- [x] Verify clean-checkout installation and independent startup with a fresh data directory.
+- [x] Audit the final public file set and PR-only workflow triggers, publish the authorized destination, and inspect remote contents.
+- [x] Synchronize final research, task, requirement, and goal records.
 
 ## Remaining installation and acceptance limits
 
-Clean copied-source installation and fresh-data web/worker lifecycle passed. A published Git checkout has not yet been installed or verified. The host browser prerequisite is Microsoft Edge; actual browser checks passed with the explicit opt-in documented in README. The container image and native authentication readiness were verified separately from the empty-Pi-directory installation check.
+Clean copied-source installation and fresh-data web/worker lifecycle passed, followed by the same check from a fresh public Git checkout of the published application commit. The host browser prerequisite is Microsoft Edge; actual browser checks passed with the explicit opt-in documented in README. The container image and native authentication readiness were verified separately from the empty-Pi-directory installation check.
 
 Both authorized real challenges were attempted once and failed artifact acceptance. Preserve those results and their uncertain liabilities. Neither the passing implementation suite nor the all 30 model responses makes their missing quality/signoff requirements pass. Remaining publication verification must inspect exact remote contents and PR-only workflow policy; no workflow files exist in the current source.

@@ -118,19 +118,19 @@ Source: [prd-simple-swarm-system.md](prd-simple-swarm-system.md), revision 2. Up
   - [ ] 6.6 Inspect actual canvas DOM and compare to recovered original across 22 seconds at 1 fps. Measure nonblank/motion/brightness, inspect flow and density, test resize/DPR and longer stability.
   - [x] 6.7 Preserve canvas artifact/reference provenance/hash/traces/ledger/visual review. Record defects honestly and fix authorized system faults without silently resetting spent budget or rerunning beyond authority.
 
-- [ ] 7.0 Review, publish and hand off (FR-43–45; owner root + independent reviewer; depends all)
+- [x] 7.0 Review, publish and hand off (FR-43–45; owner root + independent reviewer; depends all)
   - [x] 7.1 Run appropriate complete suite, typecheck and build after integration; investigate failures without weakening assertions. Fill all FR-to-evidence rows.
   - [x] 7.2 Complete fixed-artifact independent review with actual different-family model identity, focusing on state, money, isolation, transport, lifecycle and UI. Resolve findings and rerun affected checks.
-  - [ ] 7.3 Write README/setup/configuration/operation/troubleshooting, MIT license and provenance; verify clean checkout installation and fresh private data directory.
+  - [x] 7.3 Write README/setup/configuration/operation/troubleshooting, MIT license and provenance; verify clean checkout installation and fresh private data directory.
   - [x] 7.4 Audit every `.github/workflows/` file for PR-only triggers, repository secrets/private logs/media and ignored runtime data before public publication.
-  - [ ] 7.5 Publish authorized public repository and verify remote contents and required checks; do not affect upstream repositories.
-  - [ ] 7.6 Update LearningVault and final requirements/task/goal receipts; deliver running local service links, repository link, how to launch, both challenge results/costs and honest limitations.
+  - [x] 7.5 Publish authorized public repository and verify remote contents and required checks; do not affect upstream repositories.
+  - [x] 7.6 Update LearningVault and final requirements/task/goal receipts; deliver running local service links, repository link, how to launch, both challenge results/costs and honest limitations.
 
 ## Latest execution receipt
 
 Full integration `job-mtrssovf-17c3dab4` passed typecheck/build and 137 tests across 13 files with 1,025 assertions in 50 seconds. This includes 10 actual Edge cases,17 HTTP cases,12 rootless Podman cases, native Pi lifecycle/transport regressions, and 3 actual-process challenge-runner checks. The independent Opus code review completed, findings were resolved, and affected checks passed. See [integration](../docs/validation/first-integration.md) and [review](../docs/validation/independent-review.md).
 
-A clean 87-file source copy installed locked dependencies, typechecked/built, started the actual authenticated dashboard and an empty-queue worker, preserved the same worker across web shutdown/restart, and shut down gracefully. No provider requests were made by the installation check. A published Git checkout remains unverified. The sandbox image was built and tested separately; the clean-install check did not rebuild it or authenticate providers.
+A clean 87-file source copy installed locked dependencies, typechecked/built, started the actual authenticated dashboard and an empty-queue worker, preserved the same worker across web shutdown/restart, and shut down gracefully. No provider requests were made by the installation check. The subsequent public-checkout install passed in job-mtrt69e3-41b82993; see public-delivery.md. The sandbox image was built and tested separately; the clean-install check did not rebuild it or authenticate providers.
 
 Both ordered genuine challenges reached30 distinct actual Pi sessions and30 server-verified responses with exact model/High settings. Both ended budget_exhausted within their own $50 cap. Pelican: $23.219985 settled+$21.600000 uncertain, valid SVG but uncorrected contact/signoff defects. Canvas: $1.585418 settled+$32.520000 uncertain, no final HTML. [Acceptance](../docs/validation/acceptance.md) records all missing criteria without calling either run successful. No extra spending or replacement run is authorized.
 
@@ -140,3 +140,7 @@ Both ordered genuine challenges reached30 distinct actual Pi sessions and30 serv
 - Preserve failed quality, temporal and final-signoff requirements; do not substitute synthetic or operator-authored output for a genuine challenge.
 - Audit the final publication file set and workflows, publish only the authorized repository, and verify a checkout of its published contents.
 - Synchronize LearningVault, requirements, task and goal receipts; hand off the running services, source, actual costs and limitations.
+
+## Public delivery receipt
+
+Repository https://github.com/T-Py-T/simpleswarmsystem is public on main. Published application commitb23594e0453a23eeab93904b4fe9bd4f1223a90c matched a fresh public clone and passed locked install, typecheck/build and18 isolated web/worker lifecycle checks. No workflows or Actions runs; no private references, credentials, real sessions or databases published. See [public-delivery.md](../docs/validation/public-delivery.md). Successful artifact acceptance remains open without further authorized budget.
