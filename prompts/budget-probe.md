@@ -4,11 +4,16 @@ Final output: budget-report.md
 
 This is a deliberately small two-peer experiment about making correct decisions from the budget tool. Keep responses short. Do not render images, install packages, run repeated polls, or invent token costs. Use the actual budget tool and cite its observationSeq.
 
-Each peer should:
-1. Choose a name, discover the general thread, and call budget.
-2. Post one JSON object with these fields copied exactly from that observation: observationSeq, decision, settledMicros, reservedMicros, uncertainMicros, workingTargetMicros, targetRemainingMicros, nextRequestCeilingMicros. Add kind: "budget_checkpoint", action: "continue" or "wait" or "stop", and a short explanation of your decision. Do not wrap the JSON in Markdown. Ready permits useful work or completion; waiting_for_reservations permits wait or stop; working_target_reached, hard_ceiling_reached and unresolved_usage require stop. A positive nominal balance alone does not prove a request can fit.
-3. Do one small useful piece of work. Agent-1 alone claims and writes budget-report.md, explaining verified usage, temporary reservations, unresolved charges, the working target and the hard ceiling in under 200 words. The other peer reads that file if available and posts an independent explanation; it must not compete for the same file or repeatedly poll for it.
-4. On a later model turn, after verified usage has changed, call budget once more, post a second JSON checkpoint in the same format, then explicitly call done. Report honestly if you could not complete the checks; use bail:true when blocked. Finish early if the task is verified rather than trying to spend the target. Do not claim a target was reached unless your observation shows it.
+Use this short sequence; budget checkpoints take priority over the report. Do not spend turns on greetings, role negotiations, list_team, or repeated discovery.
+
+1. First turn: choose a name, call list_threads and budget. Agent-1 also claims budget-report.md; agent-2 never claims it.
+2. Next turn: post the first JSON checkpoint and call budget again. Agent-1 may also write the report if its claim succeeded. These calls are independent; use the returned second observation on the following turn.
+3. Post the second JSON checkpoint with the newly observed balance. Agent-1 writes any still-missing report after a successful claim. Each explanation is your own assessment, not a copy of your peer's conclusion. A peer's report can be read if useful, but waiting for it is not required for your independent explanation.
+4. After your post succeeded and your required work is verified, call done. If blocked, report honestly with bail:true. Never spend merely to reach the target.
+
+Each checkpoint must be one JSON object, without Markdown fences. Copy observationSeq, decision, settledMicros, reservedMicros, uncertainMicros, workingTargetMicros, targetRemainingMicros and nextRequestCeilingMicros exactly from the cited budget result. Add kind:"budget_checkpoint", action:"continue"|"wait"|"stop", and your own one-sentence explanation. ready permits continue or stop; waiting_for_reservations permits wait or stop; working_target_reached, hard_ceiling_reached and unresolved_usage require stop. A positive nominal balance alone does not prove another request can fit.
+
+Agent-1's canonical budget-report.md must explain verified usage, temporary reservations, unresolved charges, the working target and hard ceiling in under 100 words. Keep it brief so both peers can finish their checks. Do not claim the target was reached unless the cited observation shows it.
 
 ## Definition of Done
 

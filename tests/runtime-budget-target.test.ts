@@ -113,6 +113,19 @@ function latestBudgetToolResult(payload: Record<string, unknown>): Record<string
 }
 
 describe('working target admission without relaxing the hard ceiling', () => {
+  test('early admission reserves capacity without validating or dispatching a payload', async () => {
+    const current = fixture({ budgetMicros: 100 });
+    current.store.startAgent(current.actor, crypto.randomUUID());
+    let calls = 0;
+    const request = new RequestLiability({ ...current, ceiling: 30, evidence: 'Synthetic early admission', signal: signal(), fetch: intercepted(async () => { calls++; return new Response(); }) });
+    await request.awaitAdmission();
+    expect(current.store.budget(current.run.id).reservedMicros).toBe(30);
+    await expect(request.fetch(endpoint, { method: 'POST' })).rejects.toMatchObject({ code: 'payload_invalid' });
+    expect(calls).toBe(0);
+    request.uncertain('Undispatched payload did not pass validation');
+    expect(current.store.budget(current.run.id)).toMatchObject({ settledMicros: 0, reservedMicros: 0, uncertainMicros: 0, availableMicros: 100 });
+  });
+
   test('settled target blocks both fresh admission and an already reserved but undispatched request', async () => {
     const current = fixture({ budgetMicros: 100, workingTargetMicros: 20 });
     for (const actor of current.actors) current.store.startAgent(actor, crypto.randomUUID());
@@ -186,6 +199,40 @@ test('two real Pi peers may finish dispatched requests beyond the working target
   } finally { await runtime.dispose(); }
 }, 15000);
 
+test('a real Pi peer waiting for hard-cap capacity receives its predecessor settlement in the dispatched context', async () => {
+  const current = await runtimeFixture({ agentCount: 2, budgetMicros: 6_000_000, workingTargetMicros: 2000 });
+  const notes: Record<string, unknown>[] = [];
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async (input, init) => {
+    const ordinal = ++calls;
+    if (ordinal > 2) throw new Error('Completed peers attempted another model request');
+    const note = budgetNote(record(await new Request(input, init).json()));
+    notes.push(note);
+    const balance = current.store.budget(current.run.id);
+    expect(note).toMatchObject({ ...balance, ownSettledMicros: 0, targetRemainingMicros: 2000 - (ordinal - 1) * 850 });
+    expect(note.settledMicros).toBe((ordinal - 1) * 850);
+    expect(note.reservedMicros).toBe(5_400_000);
+    expect(note.availableMicros).toBe(600_000 - (ordinal - 1) * 850);
+    if (ordinal === 1) {
+      await eventually(() => current.store.getSwarm(current.run.id).agents.some(agent => agent.status === 'waiting'));
+      expect(calls).toBe(1);
+      expect(current.store.budget(current.run.id).settledMicros).toBe(0);
+    }
+    return toolResponse(ordinal, 'done');
+  }));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    expect(calls).toBe(2);
+    expect(notes.map(note => note.settledMicros)).toEqual([0, 850]);
+    expect(notes.map(note => note.targetRemainingMicros)).toEqual([2000, 1150]);
+    expect(state.status).toBe('completed');
+    expect(state.agents.map(agent => agent.status)).toEqual(['done', 'done']);
+    expect(state.budget).toMatchObject({ settledMicros: 1700, reservedMicros: 0, uncertainMicros: 0, availableMicros: 5_998_300 });
+    expect(current.store.reservations(state.id).map(reservation => reservation.status)).toEqual(['settled', 'settled']);
+  } finally { await runtime.dispose(); }
+}, 15000);
+
 for (const workingTargetMicros of [850, 800]) {
   test(`explicit completion stays completed when its final verified response reaches target ${workingTargetMicros}`, async () => {
     const current = await runtimeFixture({ agentCount: 1, workingTargetMicros });
@@ -223,11 +270,13 @@ for (const workingTargetMicros of [100_000, undefined]) {
       const payload = record(await new Request(input, init).json());
       const note = budgetNote(payload); notes.push(note);
       expect(note).toMatchObject({ settledMicros: (ordinal - 1) * 850, ownSettledMicros: (ordinal - 1) * 850, workingTargetMicros: workingTargetMicros ?? null, targetRemainingMicros: workingTargetMicros === undefined ? null : workingTargetMicros - (ordinal - 1) * 850, decision: 'ready' });
+      expect(note).toMatchObject({ reservedMicros: 5_400_000, availableMicros: 44_600_000 - (ordinal - 1) * 850 });
       if (ordinal > 1) {
         const { observationSeq, ...result } = latestBudgetToolResult(payload);
         if (typeof observationSeq !== 'number' || !Number.isSafeInteger(observationSeq) || observationSeq <= 0) throw new Error('Budget tool omitted its immutable observation cursor');
         observationSeqs.push(observationSeq); toolResults.push(result);
-        expect(result).toEqual(note);
+        // The preceding tool ran after settlement; this fresh context includes its own new reservation.
+        expect(result).toMatchObject({ settledMicros: note.settledMicros, ownSettledMicros: note.ownSettledMicros, workingTargetMicros: note.workingTargetMicros, targetRemainingMicros: note.targetRemainingMicros, reservedMicros: 0, availableMicros: 50_000_000 - (ordinal - 1) * 850, decision: 'ready' });
       }
       return toolResponse(ordinal, ordinal === 3 ? 'done' : 'budget');
     });

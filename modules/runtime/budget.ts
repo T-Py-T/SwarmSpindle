@@ -102,9 +102,12 @@ export class RequestLiability {
 
   validated(): void { this.payloadValidated = true; }
 
+  /** Reserve capacity before constructing context, without authorizing an unvalidated payload. */
+  async awaitAdmission(): Promise<void> { await this.reserve(); }
+
   async prepare(): Promise<void> {
     this.validated();
-    await this.reserve();
+    await this.awaitAdmission();
   }
 
   private async reserve(): Promise<void> {
