@@ -14,8 +14,8 @@
 - [x] 3. Add optional working target, runtime dispatch gate and refreshed budget context; verify boundaries and existing in-flight settlement.
 - [x] 4. Add CLI/UI configuration and validate small-run settings.
 - [x] 5.1 Build and verify the bounded probe, including adversarial grading and one-shot allocation protection.
-- [ ] 5.2 Run selected live coverage only after the pending budget answer.
+- [x] 5.2 Run the approved two-peer Opus probe and record its outcome: target enforcement passed, awareness assessment incomplete at $0.253640.
 - [x] 6. Capture real app screenshots, rewrite README and verify its instructions and links.
 - [x] 7. Complete relevant regression checks, restart services safely and capture evidence.
 
-Delivery follows the repository PR workflow. Live model testing remains explicitly pending in task 5.2.
+Delivery follows the repository PR workflow. The first live probe is recorded in task 5.2. A follow-up paid run requires a new allocation decision; the original one-shot claim remains retained.

@@ -103,6 +103,7 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
       };
       const forward = async () => {
         try {
+          await liability.awaitAdmission();
           const snapshot = budgetAwareness(store.getSwarm(run.id), peer.actor);
           const budgetContext = { ...context, systemPrompt: `${context.systemPrompt ?? ''}\n\nCURRENT BUDGET SNAPSHOT (runtime-owned; refresh with budget before decisions):\n${JSON.stringify(snapshot)}` };
           const stream = models.streamSimple(model, budgetContext, {

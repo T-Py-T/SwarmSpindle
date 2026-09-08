@@ -1,0 +1,74 @@
+{
+  "date": "2026-09-08",
+  "swarmId": "82411d66-2b99-4ee9-bd15-f041c924a2b8",
+  "model": {
+    "provider": "anthropic",
+    "id": "claude-opus-4-8",
+    "thinking": "high"
+  },
+  "status": "bailed",
+  "reason": "Shared verified usage reached the working target. No further model requests will start; existing requests may finish within the separate hard ceiling.",
+  "agentCount": 2,
+  "responseCount": 6,
+  "budget": {
+    "capMicros": 6000000,
+    "settledMicros": 253640,
+    "reservedMicros": 0,
+    "uncertainMicros": 0,
+    "availableMicros": 5746360
+  },
+  "workingTargetMicros": 250000,
+  "elapsedMs": 38281,
+  "settlements": [
+    {
+      "eventSeq": 12,
+      "settledMicros": 28915
+    },
+    {
+      "eventSeq": 30,
+      "settledMicros": 58805
+    },
+    {
+      "eventSeq": 46,
+      "settledMicros": 108475
+    },
+    {
+      "eventSeq": 61,
+      "settledMicros": 155900
+    },
+    {
+      "eventSeq": 73,
+      "settledMicros": 212440
+    },
+    {
+      "eventSeq": 82,
+      "settledMicros": 253640
+    }
+  ],
+  "peers": [
+    {
+      "agentId": "82411d66-2b99-4ee9-bd15-f041c924a2b8:agent-1",
+      "name": "Ada",
+      "status": "bailed",
+      "validCheckpoints": 1,
+      "invalidCheckpoints": 0,
+      "uniqueObservations": 1,
+      "distinctBalances": 1,
+      "passed": false
+    },
+    {
+      "agentId": "82411d66-2b99-4ee9-bd15-f041c924a2b8:agent-2",
+      "name": "Beacon",
+      "status": "bailed",
+      "validCheckpoints": 1,
+      "invalidCheckpoints": 0,
+      "uniqueObservations": 1,
+      "distinctBalances": 1,
+      "passed": false
+    }
+  ],
+  "observedNearTarget": false,
+  "observedTargetReached": false,
+  "hasReport": true,
+  "passed": false
+}
