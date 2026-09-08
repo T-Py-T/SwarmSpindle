@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { SwarmRecord } from '@simpleswarm/swarm';
+import type { MessageContext, MessageSearchPage, SwarmRecord } from '@simpleswarm/swarm';
 import { openWebFixture, readEvents, webSpec, type WebFixture } from './helpers/web-fixture.ts';
 
 let fixture: WebFixture;
@@ -19,6 +19,65 @@ function startRuns(...runs: SwarmRecord[]): void {
     fixture.store.startAgent(actor(run), `session-${run.id}`);
   }
 }
+
+describe('cross-board message search HTTP', () => {
+  test('searches complete historical bodies across swarms with stable snapshots and context links', async () => {
+    const first = await fixture.launch({ title: 'First search mission' });
+    const second = await fixture.launch({ title: 'Second search mission' });
+    startRuns(first, second);
+    const board = fixture.store.createThread(actor(first), 'Earlier discussion');
+    const secondBoard = fixture.store.threads(second.id)[0]!;
+    fixture.store.renameAgent(actor(first), 'Geometry Reviewer');
+    const hidden = fixture.store.post(actor(first), board.id, `${'Long context '.repeat(1000)}FindThis <img src=x onerror=alert(1)> 100%_done`);
+    fixture.store.post(actor(first), board.id, 'Latest message hides the earlier search match.');
+    fixture.store.postOperator(second.id, secondBoard.id, 'findthis on the other board');
+    const response = await fixture.request('/api/messages/search?query=FINDTHIS&limit=1');
+    expect(response.status).toBe(200); expect(response.headers.get('content-type')).toContain('application/json');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    const page: MessageSearchPage = await response.json();
+    expect(page.messages[0]).toMatchObject({ ...hidden, swarmTitle: first.spec.title, threadTitle: board.title, authorName: 'Geometry Reviewer' });
+    const firstHit = page.messages[0];
+    if (!firstHit) throw new Error('Expected a full-body search hit.');
+    expect(page.next).toBe(firstHit.searchId);
+    fixture.store.postOperator(second.id, secondBoard.id, 'findthis newly appended');
+    const continued: MessageSearchPage = await (await fixture.request(`/api/messages/search?query=findthis&limit=1&after=${page.next}&through=${page.through}`)).json();
+    expect(continued.messages).toHaveLength(1); expect(continued.messages[0]?.body).toBe('findthis on the other board');
+    expect(continued.next).toBeNull(); expect(continued.through).toBe(page.through);
+    const context: MessageContext = await (await fixture.request(`/api/swarms/${first.id}/message-context?message=${hidden.id}`)).json();
+    expect(context.thread.id).toBe(board.id); expect(context.targetId).toBe(hidden.id);
+    expect(context.messages.map(message => message.body)).toEqual([hidden.body, 'Latest message hides the earlier search match.']);
+    const scoped: MessageSearchPage = await (await fixture.request(`/api/messages/search?${new URLSearchParams({ query: 'findthis', swarm: first.id, author: actor(first).agentId })}`)).json();
+    expect(scoped.messages.map(message => message.id)).toEqual([hidden.id]);
+    const operators: MessageSearchPage = await (await fixture.request('/api/messages/search?query=findthis&author=operator')).json();
+    expect(operators.messages.map(message => message.body)).toEqual(['findthis on the other board', 'findthis newly appended']);
+    const literal: MessageSearchPage = await (await fixture.request(`/api/messages/search?${new URLSearchParams({ query: '100%_done' })}`)).json();
+    expect(literal.messages.map(message => message.body)).toEqual([hidden.body]);
+  });
+  test('enforces authentication, request bounds, and missing or foreign context without writes', async () => {
+    const first = await fixture.launch(); const second = await fixture.launch();
+    const board = fixture.store.threads(first.id)[0]!;
+    const target = fixture.store.postOperator(first.id, board.id, "literal ' OR 1=1 --");
+    const events = fixture.store.events(first.id);
+    const paths = ['/api/messages/search?query=literal', `/api/swarms/${first.id}/message-context?message=${target.id}`];
+    for (const path of paths) {
+      expect((await fixture.request(path, { headers: { cookie: '' } })).status).toBe(401);
+      expect((await fixture.request(path, { headers: { host: 'evil.example' } })).status).toBe(403);
+      expect((await fixture.request(path, { headers: { origin: 'https://evil.example' } })).status).toBe(403);
+      expect((await fixture.request(path, { headers: { 'sec-fetch-site': 'cross-site' } })).status).toBe(403);
+    }
+    for (const suffix of ['', '?query=', '?query=%20', `?query=${'x'.repeat(201)}`, '?query=x&limit=0', '?query=x&limit=51', '?query=x&after=-1', '?query=x&through=999', '?query=x&after=1.2']) {
+      expect((await fixture.request(`/api/messages/search${suffix}`)).status).toBe(400);
+    }
+    expect((await fixture.request(`/api/swarms/${second.id}/message-context?message=${target.id}`)).status).toBe(404);
+    expect((await fixture.request(`/api/swarms/missing/message-context?message=${target.id}`)).status).toBe(404);
+    expect((await fixture.request(`/api/swarms/${first.id}/message-context?message=999`)).status).toBe(404);
+    expect((await fixture.request(`/api/swarms/${first.id}/message-context`)).status).toBe(400);
+    expect((await fixture.request(`/api/swarms/${first.id}/message-context?message=1.2`)).status).toBe(400);
+    const literal: MessageSearchPage = await (await fixture.request(`/api/messages/search?${new URLSearchParams({ query: "' OR 1=1 --" })}`)).json();
+    expect(literal.messages.map(message => message.body)).toEqual([target.body]);
+    expect(fixture.store.events(first.id)).toEqual(events);
+  });
+});
 
 describe('FR-36 control HTTP authentication and request boundaries', () => {
   test('bootstraps an HttpOnly Strict cookie and embeds its CSRF credential on loopback', async () => {

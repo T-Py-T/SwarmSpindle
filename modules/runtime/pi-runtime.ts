@@ -8,7 +8,7 @@ import { createAssistantMessageEventStream, type Api, type AssistantMessage, typ
 import type { Actor, SwarmRecord, TokenUsage } from '@simpleswarm/swarm';
 import type { ModelReadiness, RuntimeOptions, SwarmRuntime } from './contracts.ts';
 import { BudgetAdmission, RequestLiability } from './budget.ts';
-import { priceUsage, PRICING_EVIDENCE, reservationCeiling, RuntimeError, validatePayload } from './pricing.ts';
+import { PRICING_EVIDENCE, reservationCeiling, RuntimeError, SessionPricing, validatePayload } from './pricing.ts';
 import { createSwarmTools, type AgentCompletion } from './tools.ts';
 import { ResponseEvidence } from './response-evidence.ts';
 
@@ -81,10 +81,13 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
   }
 
   function attachTransport(peer: RunningPeer, run: SwarmRecord, models: ModelRuntime, model: Model<Api>, signal: AbortSignal): void {
+    const pricing = new SessionPricing(run.spec.model);
     peer.session.agent.streamFunction = async (requestedModel, context, streamOptions) => {
       if (peer.completion) throw new RuntimeError('agent_complete', 'Participation has ended.');
       if (peer.failure) throw peer.failure;
       signal.throwIfAborted();
+      const admissionFailure = admission.failure(run.id);
+      if (admissionFailure) { peer.failure = admissionFailure; throw admissionFailure; }
       if (requestedModel.id !== model.id || requestedModel.provider !== model.provider) throw new RuntimeError('model_changed', 'Model substitution is forbidden.');
       if (++peer.turns > run.spec.maxTurnsPerAgent) {
         peer.failure = new RuntimeError('turn_limit', 'Maximum model turns reached.'); throw peer.failure;
@@ -119,7 +122,7 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
               const usage: TokenUsage = { input: message.usage.input, output: message.usage.output, cacheRead: message.usage.cacheRead, cacheWrite: message.usage.cacheWrite };
               if (model.provider === 'anthropic' && usage.output > run.spec.maxOutputTokens) throw new RuntimeError('usage_invalid', 'Provider output exceeded the enforced ceiling.');
               const verified = evidence.verify(usage);
-              liability.settle(priceUsage(run.spec.model, verified.usage), verified.usage);
+              liability.settle(pricing.price(verified.usage), verified.usage);
               store.appendEvent(run.id, peer.actor.agentId, 'model_response', { requestedModel: model.id, responseModel: verified.responseModel, provider: model.provider, thinking: 'high', turn: peer.turns, usage: { ...usage }, stopReason: message.stopReason });
               terminal = true;
             } else if (event.type === 'error') {
@@ -216,9 +219,10 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
       const state = store.getSwarm(run.id);
       const hasFinal = store.files(run.id).some(file => file.path === run.spec.finalOutput && file.size > 0);
       const budgetStopped = peers.some(peer => peer.failure?.code === 'budget_exhausted');
+      const admissionFailure = admission.failure(run.id);
       const allDone = state.agents.every(agent => agent.status === 'done');
-      const status = signal.aborted ? abortOutcome(signal).run : state.status === 'stopping' ? 'cancelled' : budgetStopped ? 'budget_exhausted' : allDone && hasFinal ? 'completed' : state.agents.some(agent => agent.status === 'failed' || agent.status === 'stalled') ? 'failed' : 'bailed';
-      store.finishSwarm(run.id, status, status === 'completed' ? 'All peers explicitly completed and the canonical output exists. Independent artifact acceptance remains in the run evidence.' : 'Swarm stopped; inspect peer conclusions and retained budget liabilities.');
+      const status = signal.aborted ? abortOutcome(signal).run : state.status === 'stopping' ? 'cancelled' : admissionFailure ? 'failed' : budgetStopped ? 'budget_exhausted' : allDone && hasFinal ? 'completed' : state.agents.some(agent => agent.status === 'failed' || agent.status === 'stalled') ? 'failed' : 'bailed';
+      store.finishSwarm(run.id, status, status === 'completed' ? 'All peers explicitly completed and the canonical output exists. Independent artifact acceptance remains in the run evidence.' : admissionFailure?.message ?? 'Swarm stopped; inspect peer conclusions and retained budget liabilities.');
     } catch (cause) {
       const cancelled = signal.aborted ? abortOutcome(signal) : undefined;
       controller.abort();

@@ -122,6 +122,167 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await page.screenshot({ path: join(directory, name), fullPage: true });
   }
 
+  async function searchMessages(query: string, scope = 'selected', author = ''): Promise<void> {
+    const search = page.locator('#message-search');
+    await search.getByLabel('Search message text', { exact: true }).fill(query);
+    await search.getByLabel('Scope', { exact: true }).selectOption(scope);
+    await search.getByLabel('Author ID (optional)', { exact: true }).fill(author);
+    const response = page.waitForResponse(value => new URL(value.url()).pathname === '/api/messages/search');
+    await search.getByRole('button', { name: 'SEARCH MESSAGES', exact: true }).click();
+    await (await response).finished();
+    await browserExpect(search.locator('[data-search-status]')).toHaveText(/matching messages loaded|No matching messages/);
+  }
+
+  async function downloadSearchResults(): Promise<Array<Record<string, unknown>>> {
+    const downloadEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'EXPORT LOADED RESULTS · JSONL', exact: true }).click();
+    const download = await downloadEvent;
+    expect(download.suggestedFilename()).toBe('swarm-message-search.jsonl');
+    expect(await download.failure()).toBeNull();
+    const path = await download.path();
+    if (!path) throw new Error('Expected the browser to save the JSONL download.');
+    return (await Bun.file(path).text()).trimEnd().split('\n').map(line => {
+      const row: unknown = JSON.parse(line);
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('Expected each exported line to be a message object.');
+      return Object.fromEntries(Object.entries(row));
+    });
+  }
+
+  test('searches full earlier bodies with literal safe highlights, swarm scope and exact operator author', async () => {
+    const first = await seedRunningSwarm('Selected message search swarm');
+    const second = await seedRunningSwarm('Other message search swarm');
+    const phrase = 'iridescent beak geometry';
+    const literal = '<img src=x onerror=alert(71)><script>alert(72)</script>';
+    fixture.store.post(first.actor, first.thread.id, `${'Earlier prose '.repeat(100)}IRIDESCENT BEAK GEOMETRY ${literal}${' trailing prose'.repeat(100)}`);
+    fixture.store.post(first.actor, first.thread.id, 'The latest preview deliberately has no earlier search phrase.');
+    fixture.store.postOperator(first.run.id, first.thread.id, `Operator requested ${phrase} inspection.`);
+    fixture.store.post(second.actor, second.thread.id, `Other swarm discussed ${phrase}.`);
+    await selectSwarm(first.run.id);
+    await browserExpect(page.getByRole('button', { name: 'MESSAGE BOARD', exact: true })).toHaveClass('selected');
+    await searchMessages(phrase);
+    const results = page.locator('#message-search .search-hit');
+    await browserExpect(results).toHaveCount(2);
+    const earlier = results.filter({ hasText: literal });
+    await browserExpect(earlier).toHaveCount(1);
+    await browserExpect(earlier.locator('mark')).toHaveText('IRIDESCENT BEAK GEOMETRY');
+    await browserExpect(earlier.locator('.prose')).toContainText(literal);
+    await browserExpect(page.locator('#message-search img, #message-search script')).toHaveCount(0);
+    await searchMessages(phrase, 'all');
+    await browserExpect(results).toHaveCount(3);
+    await browserExpect(results.filter({ hasText: 'Other message search swarm' })).toHaveCount(1);
+    await searchMessages(phrase, 'selected', 'operator');
+    await browserExpect(results).toHaveCount(1);
+    await browserExpect(results).toContainText('Operator requested');
+    await browserExpect(results).toContainText('Selected message search swarm');
+    await page.getByLabel('Search message text', { exact: true }).fill('   ');
+    await page.getByRole('button', { name: 'SEARCH MESSAGES', exact: true }).click();
+    await browserExpect(page.locator('[data-search-status]')).toHaveText('Enter a phrase to search.');
+    await browserExpect(results).toHaveCount(0);
+    await browserExpect(page.locator('[data-export]')).not.toBeVisible();
+    await browserExpect(page.locator('[data-more]')).not.toBeVisible();
+  }, 30000);
+
+  test('opens bounded nearby context, follows a cross-swarm conversation and reloads its permanent message link', async () => {
+    const first = await seedRunningSwarm('Search starting swarm');
+    const second = await seedRunningSwarm('Context destination swarm');
+    const thread = fixture.store.createThread(second.actor, 'Cross-swarm discussion');
+    const messages = Array.from({ length: 9 }, (_, index) => fixture.store.post(second.actor, thread.id,
+      index === 4 ? `Unique context needle ${'full target body '.repeat(80)}exact ending` : `Nearby context item ${index}`));
+    const target = messages[4]!;
+    fixture.store.post(second.actor, second.thread.id, 'Unrelated thread must not enter nearby context.');
+    await selectSwarm(first.run.id);
+    await searchMessages('Unique context needle', 'all');
+    await browserExpect(page.locator('.search-hit')).toHaveCount(1);
+    await page.getByRole('button', { name: 'VIEW CONTEXT', exact: true }).click();
+    const nearby = page.locator('[data-context]');
+    await browserExpect(nearby.locator('[data-context-message]')).toHaveCount(7);
+    expect(await nearby.locator('[data-context-message]').evaluateAll(items => items.map(item => Number(item.getAttribute('data-context-message')))))
+      .toEqual(messages.slice(1, 8).map(message => message.id));
+    await browserExpect(nearby.locator('.target-message .prose')).toHaveText(target.body);
+    await browserExpect(nearby.locator('.target-message mark')).toHaveText('Unique context needle');
+    await browserExpect(nearby).not.toContainText('Unrelated thread');
+    await browserExpect(page.locator('#summary h1')).toHaveText('Search starting swarm');
+    const permalink = await nearby.getByRole('link', { name: 'PERMANENT LINK', exact: true }).getAttribute('href');
+    if (!permalink) throw new Error('Expected a permanent context link.');
+    expect(new URL(permalink).searchParams.get('swarm')).toBe(second.run.id);
+    expect(new URL(permalink).searchParams.get('message')).toBe(String(target.id));
+    await nearby.getByRole('button', { name: 'OPEN FULL CONVERSATION', exact: true }).click();
+    await browserExpect(page.locator('#summary h1')).toHaveText('Context destination swarm');
+    await browserExpect(page.locator('#board-title')).toHaveText('Cross-swarm discussion');
+    await browserExpect(page.locator('#conversation-messages .message')).toHaveCount(9);
+    await browserExpect(page.locator('#detail')).not.toBeVisible();
+    await browserExpect(page.locator('#board-body .goal-block')).not.toHaveAttribute('open');
+    expect(new URL(page.url()).searchParams.get('thread')).toBe(thread.id);
+    await page.goto(permalink, { waitUntil: 'domcontentloaded' });
+    await browserExpect(nearby.locator('.target-message .prose')).toHaveText(target.body);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await browserExpect(page.locator('#summary h1')).toHaveText('Context destination swarm');
+    await browserExpect(nearby.locator('.target-message')).toHaveAttribute('data-context-message', String(target.id));
+    await browserExpect(nearby.locator('[data-context-message]')).toHaveCount(7);
+  }, 30000);
+
+  test('downloads exact loaded message bodies and provenance while pagination keeps its original snapshot', async () => {
+    const { run, actor, thread } = await seedRunningSwarm('Message export provenance');
+    const query = 'export snapshot needle';
+    const messages = Array.from({ length: 28 }, (_, index) => fixture.store.post(actor, thread.id,
+      `${query} item ${index}\n${'Full body outside the excerpt. '.repeat(50)}<literal>& exact tail ${index}`));
+    await selectSwarm(run.id);
+    await searchMessages(query);
+    await browserExpect(page.locator('.search-hit')).toHaveCount(25);
+    await browserExpect(page.locator('[data-more]')).toBeVisible();
+    const late = fixture.store.post(actor, thread.id, `${query} arrived after the search snapshot`);
+    const firstDownload = await downloadSearchResults();
+    expect(firstDownload).toHaveLength(25);
+    const through = firstDownload[0]?.through;
+    expect(typeof through).toBe('number');
+    firstDownload.forEach((row, index) => {
+      const message = messages[index]!;
+      expect(row).toMatchObject({ ...message, swarmTitle: run.spec.title, threadTitle: thread.title, authorName: 'Reviewer alpha', query, through });
+      expect(typeof row.searchId).toBe('number');
+      const url = new URL(String(row.contextUrl));
+      expect(url.origin).toBe(servers.origin);
+      expect(url.searchParams.get('swarm')).toBe(run.id);
+      expect(url.searchParams.get('message')).toBe(String(message.id));
+    });
+    await page.getByRole('button', { name: 'LOAD MORE RESULTS', exact: true }).click();
+    await browserExpect(page.locator('.search-hit')).toHaveCount(28);
+    await browserExpect(page.locator('[data-more]')).not.toBeVisible();
+    const finalDownload = await downloadSearchResults();
+    expect(finalDownload.map(row => row.id)).toEqual(messages.map(message => message.id));
+    expect(finalDownload.map(row => row.body)).toEqual(messages.map(message => message.body));
+    expect(finalDownload.every(row => row.through === through && row.id !== late.id)).toBe(true);
+  }, 30000);
+
+  test('ignores an obsolete failed search after a newer successful search completes', async () => {
+    const { run, actor, thread } = await seedRunningSwarm();
+    fixture.store.post(actor, thread.id, 'Current successful message search evidence');
+    await selectSwarm(run.id);
+    let release: () => void = () => {};
+    let captured: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const capture = new Promise<void>(resolve => { captured = resolve; });
+    await page.route(`${servers.origin}/api/messages/search?*`, async route => {
+      if (new URL(route.request().url()).searchParams.get('query') !== 'obsolete request') { await route.continue(); return; }
+      captured();
+      await gate;
+      await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Obsolete search error must stay hidden' }) });
+    });
+    try {
+      await page.getByLabel('Search message text', { exact: true }).fill('obsolete request');
+      await page.getByRole('button', { name: 'SEARCH MESSAGES', exact: true }).click();
+      await capture;
+      await searchMessages('Current successful');
+      const obsoleteResponse = page.waitForResponse(response => new URL(response.url()).searchParams.get('query') === 'obsolete request');
+      release();
+      await (await obsoleteResponse).finished();
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await browserExpect(page.locator('[data-search-status]')).toContainText('1 matching messages loaded');
+      await browserExpect(page.locator('.search-hit')).toHaveCount(1);
+      await browserExpect(page.locator('.search-hit')).toContainText('Current successful message search evidence');
+      await browserExpect(page.locator('[data-export]')).toBeVisible();
+    } finally { release(); await page.unrouteAll({ behavior: 'wait' }); }
+  }, 30000);
+
   test('selects a swarm, shows actual stats and traces, searches threads, and posts an operator message', async () => {
     const { run, thread } = await seedRunningSwarm();
     await selectSwarm(run.id);
@@ -143,16 +304,20 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await page.locator('#sort').selectOption('volume');
     await page.locator('#filter').selectOption('active');
     await page.locator(`[data-thread="${thread.id}"]`).click();
-    await browserExpect(page.locator('#detail')).toBeVisible();
-    await browserExpect(page.locator('#detail-title')).toHaveText('Rendering review');
-    await browserExpect(page.locator('#detail-body')).toContainText(run.spec.task);
-    await browserExpect(page.locator('#detail-body')).toContainText(run.spec.definitionOfDone);
+    await browserExpect(page.locator('#board-conversation')).toBeVisible();
+    await browserExpect(page.locator('#detail')).not.toBeVisible();
+    await browserExpect(page.locator('#board-title')).toHaveText('Rendering review');
+    await browserExpect(page.locator('#board-body .goal-block')).not.toHaveAttribute('open');
+    await page.locator('#board-body .goal-block summary').click();
+    await browserExpect(page.locator('#board-body .goal-block .prose').first()).toBeVisible();
+    await browserExpect(page.locator('#board-body')).toContainText(run.spec.task);
+    await browserExpect(page.locator('#board-body')).toContainText(run.spec.definitionOfDone);
     await page.getByLabel('Message to this thread').fill('Please verify the pelican silhouette too.');
     await page.getByRole('button', { name: 'POST MESSAGE', exact: true }).click();
-    await browserExpect(page.locator('#detail-body .message')).toHaveCount(2);
-    await browserExpect(page.locator('#detail-body .message').last()).toContainText('Please verify the pelican silhouette too.');
+    await browserExpect(page.locator('#conversation-messages .message')).toHaveCount(2);
+    await browserExpect(page.locator('#conversation-messages .message').last()).toContainText('Please verify the pelican silhouette too.');
     expect(fixture.store.messages(run.id, thread.id).at(-1)).toMatchObject({ authorId: 'operator', body: 'Please verify the pelican silhouette too.' });
-    await page.getByRole('button', { name: 'Close details' }).click();
+    await page.getByRole('button', { name: 'Close conversation' }).click();
     await page.locator('#search').fill('');
     await page.getByRole('button', { name: 'AGENTS', exact: true }).click();
     await browserExpect(page.locator('.agent-row')).toHaveCount(2);
@@ -384,10 +549,10 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await browserExpect(page.locator('#summary h1')).toHaveText(title);
     await browserExpect(page.locator('#summary img, #summary svg, #summary script')).toHaveCount(0);
     await page.locator(`[data-thread="${thread.id}"]`).click();
-    await browserExpect(page.locator('#detail-body .message').last()).toContainText(maliciousMessage);
-    await browserExpect(page.locator('#detail-body .badge').first()).toHaveText(maliciousName);
-    await browserExpect(page.locator('#detail-body img, #detail-body svg, #detail-body script')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Close details' }).click();
+    await browserExpect(page.locator('#conversation-messages .message').last()).toContainText(maliciousMessage);
+    await browserExpect(page.locator('#conversation-messages .badge').first()).toHaveText(maliciousName);
+    await browserExpect(page.locator('#board-body img, #board-body svg, #board-body script')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close conversation' }).click();
 
     confirmation = 'dismiss';
     await page.getByRole('button', { name: 'STOP SWARM', exact: true }).click();
@@ -430,12 +595,12 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     const input = page.getByLabel('Message to this thread');
     const composerWidth = await input.evaluate(element => element.getBoundingClientRect().width);
     const formWidth = await page.locator('#message-form').evaluate(element => element.getBoundingClientRect().width);
-    expect(composerWidth).toBeGreaterThan(800);
+    expect(composerWidth).toBeGreaterThan(400);
     expect(Math.abs(composerWidth - formWidth)).toBeLessThanOrEqual(1);
     const draft = 'Keep this unfinished correction while the peers continue working.';
     await input.fill(draft);
     await input.evaluate(element => { if (element instanceof HTMLTextAreaElement) element.setSelectionRange(5, 16); });
-    const scrollTop = await page.locator('#detail').evaluate(dialog => dialog.scrollTop);
+    const scrollTop = await page.locator('#board-scroll').evaluate(board => { board.scrollTop = 160; return board.scrollTop; });
     expect(scrollTop).toBeGreaterThan(0);
     const incoming = '<img src=x onerror=alert(9)> Fresh peer review arrived while the operator was composing.';
     fixture.store.post(actor, thread.id, incoming);
@@ -444,7 +609,7 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await browserExpect(input).toBeFocused();
     await browserExpect(input).toHaveValue(draft);
     expect(await input.evaluate(element => element instanceof HTMLTextAreaElement ? [element.selectionStart, element.selectionEnd] : [])).toEqual([5, 16]);
-    expect(Math.abs(await page.locator('#detail').evaluate(dialog => dialog.scrollTop) - scrollTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(await page.locator('#board-scroll').evaluate(board => board.scrollTop) - scrollTop)).toBeLessThanOrEqual(1);
     await browserExpect(page.locator('#conversation-messages img, #conversation-messages script')).toHaveCount(0);
     await screenshot('fixture-live-thread-draft.png');
     await page.getByRole('button', { name: 'POST MESSAGE', exact: true }).click();

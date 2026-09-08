@@ -94,6 +94,142 @@ describe('coordination and scope', () => {
   });
 });
 
+describe('full-message search and context', () => {
+  test('finds earlier full bodies across boards, preserves message identities, and scopes author and swarm', () => {
+    const f = fixture();
+    const thread = f.store.createThread(f.first, 'Illustration board');
+    f.store.renameAgent(f.first, 'Illustrator');
+    const earlier = f.store.post(f.first, thread.id, `${'Earlier detail. '.repeat(700)}MiXeD coordination needle`);
+    f.store.post(f.first, thread.id, 'The most recent message does not contain the searched word.');
+    const general = f.store.threads(f.swarm.id)[0]!;
+    const operator = f.store.postOperator(f.swarm.id, general.id, 'Operator coordination needle');
+    const other = f.store.createSwarm(spec({ title: 'Another mission' }));
+    const otherThread = f.store.threads(other.id)[0]!;
+    const foreign = f.store.postOperator(other.id, otherThread.id, 'Across swarms: coordination needle');
+    f.store.postOperator(other.id, otherThread.id, 'Unrelated recent update');
+    const page = f.store.searchMessages({ query: ' COORDINATION NEEDLE ' });
+    expect(page.messages.map(hit => [hit.swarmId, hit.id])).toEqual([[f.swarm.id, earlier.id], [f.swarm.id, operator.id], [other.id, foreign.id]]);
+    expect(page.messages[0]).toMatchObject({ body: earlier.body, swarmTitle: f.swarm.spec.title, threadTitle: thread.title, authorName: 'Illustrator' });
+    expect(new Set(page.messages.map(hit => hit.searchId)).size).toBe(3);
+    expect(page.messages[2]?.id).toBe(1); // Local IDs intentionally overlap between swarms.
+    expect(f.store.searchMessages({ query: 'needle', swarmId: f.swarm.id }).messages.map(hit => hit.id)).toEqual([earlier.id, operator.id]);
+    expect(f.store.searchMessages({ query: 'needle', authorId: f.first.agentId }).messages.map(hit => hit.id)).toEqual([earlier.id]);
+    expect(f.store.searchMessages({ query: 'needle', authorId: 'operator' }).messages).toHaveLength(2);
+    expect(f.store.searchMessages({ query: 'needle', swarmId: other.id, authorId: f.first.agentId }).messages).toEqual([]);
+    expect(f.store.searchMessages({ query: 'Illustration board' }).messages).toEqual([]);
+    f.store.renameAgent(f.first, 'Renamed Illustrator');
+    expect(f.store.searchMessages({ query: 'needle', authorId: f.first.agentId }).messages[0]?.authorName).toBe('Renamed Illustrator');
+  });
+  test('treats punctuation and HTML literally and documents SQLite ASCII case folding', () => {
+    const f = fixture(); const thread = f.store.threads(f.swarm.id)[0]!;
+    const body = 'Literal 100%_score and a quote \' OR 1=1 -- <img src=x onerror=alert(1)> Ä';
+    f.store.postOperator(f.swarm.id, thread.id, body);
+    f.store.postOperator(f.swarm.id, thread.id, '100ZZscore does not match wildcard syntax');
+    for (const query of ['100%_SCORE', "' OR 1=1 --", '<img src=x onerror=alert(1)>', 'Ä']) {
+      expect(f.store.searchMessages({ query }).messages.map(hit => hit.body)).toEqual([body]);
+    }
+    expect(f.store.searchMessages({ query: 'ä' }).messages).toEqual([]);
+    for (const query of ['', '   ', 'x'.repeat(201)]) errorCode(() => f.store.searchMessages({ query }), 'invalid_text');
+    for (const limit of [0, -1, 1.5, 51]) expect(() => f.store.searchMessages({ query: 'score', limit })).toThrow(SwarmError);
+    for (const after of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) expect(() => f.store.searchMessages({ query: 'score', after })).toThrow(SwarmError);
+    expect(() => f.store.searchMessages({ query: 'score', through: 999 })).toThrow(SwarmError);
+  });
+  test('keeps global snapshot pages stable across new messages, two connections, and true reopen', () => {
+    const f = fixture(); const thread = f.store.threads(f.swarm.id)[0]!;
+    const other = f.store.createSwarm(spec()); const secondThread = f.store.threads(other.id)[0]!;
+    for (let index = 0; index < 6; index++) f.store.postOperator(index % 2 ? other.id : f.swarm.id, index % 2 ? secondThread.id : thread.id, `needle ${index}`);
+    const first = f.store.searchMessages({ query: 'needle', limit: 2 });
+    const lastOnFirstPage = first.messages[1];
+    if (!lastOnFirstPage) throw new Error('Expected two search hits on the first page.');
+    expect(first.next).toBe(lastOnFirstPage.searchId);
+    const writer = openSwarmStore(f.path); stores.push(writer);
+    writer.postOperator(f.swarm.id, thread.id, 'needle newly arrived');
+    const second = f.store.searchMessages({ query: 'needle', limit: 2, after: first.next!, through: first.through });
+    const third = f.store.searchMessages({ query: 'needle', limit: 2, after: second.next!, through: first.through });
+    expect([...first.messages, ...second.messages, ...third.messages].map(hit => hit.body)).toEqual(Array.from({ length: 6 }, (_, index) => `needle ${index}`));
+    expect(third.next).toBeNull(); expect(third.through).toBe(first.through);
+    expect(f.store.searchMessages({ query: 'needle' }).messages).toHaveLength(7);
+    const saved = f.store.searchMessages({ query: 'needle' });
+    stores.splice(stores.indexOf(f.store), 1); f.store.close(); stores.splice(stores.indexOf(writer), 1); writer.close();
+    const reopened = openSwarmStore(f.path); stores.push(reopened);
+    expect(reopened.searchMessages({ query: 'needle' })).toEqual(saved);
+    expect(reopened.searchMessages({ query: 'needle', after: third.messages.at(-1)!.searchId, through: first.through }).messages).toEqual([]);
+  });
+  test('backfills legacy messages without rewriting canonical state and rolls back failed publications', () => {
+    const f = fixture(); const thread = f.store.threads(f.swarm.id)[0]!;
+    f.store.post(f.first, thread.id, 'legacy needle');
+    const canonical = f.store.getSwarm(f.swarm.id); const events = f.store.events(f.swarm.id);
+    const ledger = f.store.reservations(f.swarm.id);
+    stores.splice(stores.indexOf(f.store), 1); f.store.close();
+    const legacy = new Database(f.path); legacy.exec('DROP TABLE message_search'); legacy.close();
+    const reopened = openSwarmStore(f.path); stores.push(reopened);
+    expect(reopened.searchMessages({ query: 'legacy' }).messages[0]).toMatchObject({ id: 1, body: 'legacy needle', authorName: 'agent-1' });
+    expect(reopened.getSwarm(f.swarm.id)).toEqual(canonical); expect(reopened.events(f.swarm.id)).toEqual(events);
+    expect(reopened.reservations(f.swarm.id)).toEqual(ledger);
+    const projection = reopened.searchMessages({ query: 'needle' });
+    const fault = new Database(f.path);
+    fault.exec("CREATE TRIGGER reject_swarm_save BEFORE UPDATE ON swarms BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END;");
+    expect(() => reopened.postOperator(f.swarm.id, thread.id, 'failed needle')).toThrow('fixture disk failure');
+    expect(reopened.searchMessages({ query: 'needle' })).toEqual(projection);
+    expect(reopened.messages(f.swarm.id, thread.id)).toHaveLength(1);
+    expect(reopened.events(f.swarm.id)).toEqual(events);
+    expect(() => reopened.renameAgent(f.first, 'Rollback rename')).toThrow('fixture disk failure');
+    expect(reopened.getSwarm(f.swarm.id)).toEqual(canonical);
+    expect(reopened.searchMessages({ query: 'needle' })).toEqual(projection);
+    fault.exec('DROP TRIGGER reject_swarm_save'); fault.close();
+  });
+  test('repairs historical posts missing from an existing projection on reopen while preserving earlier global IDs', () => {
+    const f = fixture(); const thread = f.store.threads(f.swarm.id)[0]!;
+    f.store.postOperator(f.swarm.id, thread.id, 'needle before upgrade');
+    const before = f.store.searchMessages({ query: 'needle' });
+    const later = f.store.postOperator(f.swarm.id, thread.id, 'needle posted by an older writer');
+    const canonical = f.store.messages(f.swarm.id, thread.id); const budget = f.store.budget(f.swarm.id);
+    stores.splice(stores.indexOf(f.store), 1); f.store.close();
+    const oldWriter = new Database(f.path);
+    oldWriter.query('DELETE FROM message_search WHERE swarm_id = ? AND message_id = ?').run(f.swarm.id, later.id);
+    oldWriter.close();
+    const reopened = openSwarmStore(f.path); stores.push(reopened);
+    const repaired = reopened.searchMessages({ query: 'needle' });
+    expect(repaired.messages[0]?.searchId).toBe(before.messages[0]?.searchId);
+    expect(repaired.messages.map(({ id, body }) => ({ id, body }))).toEqual(canonical.map(({ id, body }) => ({ id, body })));
+    expect(reopened.searchMessages({ query: 'needle', through: before.through })).toEqual(before);
+    expect(reopened.messages(f.swarm.id, thread.id)).toEqual(canonical); expect(reopened.budget(f.swarm.id)).toEqual(budget);
+    const again = openSwarmStore(f.path); stores.push(again);
+    expect(again.searchMessages({ query: 'needle' })).toEqual(repaired);
+  });
+  test('caps UTF-8 body bytes without truncating messages or skipping hits between pages', () => {
+    const f = fixture(); const thread = f.store.threads(f.swarm.id)[0]!;
+    const bodies = Array.from({ length: 4 }, (_, index) => `needle ${index} ${'😀'.repeat(90_000)}`);
+    bodies.forEach(body => f.store.postOperator(f.swarm.id, thread.id, body));
+    const first = f.store.searchMessages({ query: 'needle', limit: 50 });
+    expect(first.messages).toHaveLength(2);
+    expect(first.messages.reduce((total, message) => total + Buffer.byteLength(message.body), 0)).toBeLessThanOrEqual(1024 * 1024);
+    const lastOnFirstPage = first.messages.at(-1);
+    if (!lastOnFirstPage) throw new Error('Expected a nonempty byte-bounded search page.');
+    expect(first.next).toBe(lastOnFirstPage.searchId);
+    const second = f.store.searchMessages({ query: 'needle', limit: 50, after: first.next!, through: first.through });
+    expect(second.next).toBeNull();
+    expect([...first.messages, ...second.messages].map(message => message.body)).toEqual(bodies);
+  });
+  test('returns at most three neighbors on each side from the target thread only', () => {
+    const f = fixture(); const firstThread = f.store.threads(f.swarm.id)[0]!;
+    const unrelated = f.store.createThread(f.first, 'Unrelated board');
+    const messages = Array.from({ length: 9 }, (_, index) => {
+      const message = f.store.postOperator(f.swarm.id, firstThread.id, `context ${index}`);
+      f.store.post(f.first, unrelated.id, `other ${index}`); return message;
+    });
+    const updatedThread = f.store.threads(f.swarm.id)[0];
+    if (!updatedThread) throw new Error('Expected the populated context thread.');
+    expect(f.store.messageContext(f.swarm.id, messages[4]!.id)).toEqual({ thread: updatedThread, messages: messages.slice(1, 8), targetId: messages[4]!.id });
+    expect(f.store.messageContext(f.swarm.id, messages[0]!.id).messages).toEqual(messages.slice(0, 4));
+    expect(f.store.messageContext(f.swarm.id, messages[8]!.id).messages).toEqual(messages.slice(5));
+    const other = f.store.createSwarm(spec());
+    errorCode(() => f.store.messageContext(other.id, messages[4]!.id), 'message_not_found');
+    errorCode(() => f.store.messageContext('missing-swarm', 1), 'swarm_not_found');
+    errorCode(() => f.store.messageContext(f.swarm.id, 9999), 'message_not_found');
+  });
+});
+
 describe('versioned atomic files', () => {
   test('bounds repeated historical contents and rolls back every file and event in an oversized batch', () => {
     const f = fixture(2, 100, 1024);

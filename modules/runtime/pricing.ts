@@ -1,6 +1,6 @@
 import type { ModelBinding, TokenUsage } from '@simpleswarm/swarm';
 
-export const PRICING_EVIDENCE = '2026-09-07: https://platform.claude.com/docs/en/about-claude/pricing ; https://developers.openai.com/api/docs/models/gpt-5.5 ; https://help.openai.com/en/articles/20001415-chatgpt-rate-card-token-based-enterprise-pricing ; Pi v0.84.1 SSE, no retries, standard/global speed, no server tools. USD equivalent for OAuth.';
+export const PRICING_EVIDENCE = '2026-09-07: https://platform.claude.com/docs/en/about-claude/pricing ; https://developers.openai.com/api/docs/models/gpt-5.5 ; https://help.openai.com/en/articles/20001415-chatgpt-rate-card-token-based-enterprise-pricing ; Pi v0.84.1 SSE, no retries, standard/global speed, no server tools. GPT-5.5 long-context premium persists per Pi session. USD equivalent for OAuth.';
 
 export class RuntimeError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'RuntimeError'; }
@@ -58,7 +58,19 @@ export function validatePayload(model: ModelBinding, maxOutputTokens: number, va
   }
 }
 
-export function priceUsage(model: ModelBinding, usage: TokenUsage): number {
+/** Owned by one actual Pi session; crossing the threshold affects its later requests. */
+export class SessionPricing {
+  private tariff: 'standard' | 'long-context' = 'standard';
+  constructor(private readonly model: ModelBinding) {}
+
+  price(usage: TokenUsage): number {
+    const price = priceUsage(this.model, usage, this.tariff);
+    if (this.model.provider === 'openai-codex' && usage.input + usage.cacheRead > 272_000) this.tariff = 'long-context';
+    return price;
+  }
+}
+
+export function priceUsage(model: ModelBinding, usage: TokenUsage, tariff: 'standard' | 'long-context' = 'standard'): number {
   for (const count of Object.values(usage)) {
     if (!Number.isSafeInteger(count) || count < 0) throw new RuntimeError('usage_invalid', 'Provider usage is incomplete or invalid.');
   }
@@ -72,6 +84,6 @@ export function priceUsage(model: ModelBinding, usage: TokenUsage): number {
   if (usage.cacheWrite !== 0 || usage.input + usage.cacheRead > 1_050_000 || usage.output > 128_000) {
     throw new RuntimeError('usage_invalid', 'Usage exceeds the frozen Codex envelope.');
   }
-  const longContext = usage.input + usage.cacheRead > 272_000;
+  const longContext = tariff === 'long-context' || usage.input + usage.cacheRead > 272_000;
   return Math.ceil(usage.input * (longContext ? 10 : 5) + usage.output * (longContext ? 45 : 30) + usage.cacheRead * (longContext ? 1 : 0.5));
 }

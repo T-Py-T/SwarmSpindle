@@ -23,9 +23,38 @@ function waitForTurn(previous: Promise<void>, signal: AbortSignal): Promise<void
 /** FIFO admission avoids one fast agent monopolizing released reservations. */
 export class BudgetAdmission {
   private readonly tails = new Map<string, Promise<void>>();
+  private readonly circuits = new Map<string, AbortController>();
   constructor(private readonly store: SwarmStore) {}
 
+  failure(swarmId: string): RuntimeError | undefined {
+    const reason: unknown = this.circuits.get(swarmId)?.signal.reason;
+    if (reason instanceof RuntimeError) return reason;
+    if (this.store.budget(swarmId).uncertainMicros > 0) {
+      this.trip(swarmId);
+      return this.failure(swarmId);
+    }
+    return undefined;
+  }
+
+  assertOpen(swarmId: string): void {
+    const failure = this.failure(swarmId);
+    if (failure) throw failure;
+  }
+
+  trip(swarmId: string): void {
+    const circuit = this.circuit(swarmId);
+    if (!circuit.signal.aborted) circuit.abort(new RuntimeError('request_uncertain', 'New model requests stopped because a dispatched request has unverified charges. Existing requests may settle; uncertain liability remains retained.'));
+  }
+
+  private circuit(swarmId: string): AbortController {
+    let circuit = this.circuits.get(swarmId);
+    if (!circuit) { circuit = new AbortController(); this.circuits.set(swarmId, circuit); }
+    return circuit;
+  }
+
   async acquire(actor: Actor, ceiling: number, evidence: string, signal: AbortSignal): Promise<Reservation> {
+    this.assertOpen(actor.swarmId);
+    const admissionSignal = AbortSignal.any([signal, this.circuit(actor.swarmId).signal]);
     const previous = this.tails.get(actor.swarmId) ?? Promise.resolve();
     let release = () => {};
     const slot = new Promise<void>(resolve => { release = resolve; });
@@ -33,10 +62,11 @@ export class BudgetAdmission {
     this.tails.set(actor.swarmId, tail);
     void tail.then(() => { if (this.tails.get(actor.swarmId) === tail) this.tails.delete(actor.swarmId); });
     try {
-      await waitForTurn(previous, signal);
+      await waitForTurn(previous, admissionSignal);
       let waiting = false;
       for (;;) {
-        signal.throwIfAborted();
+        admissionSignal.throwIfAborted();
+        this.assertOpen(actor.swarmId);
         const run = this.store.getSwarm(actor.swarmId);
         if (run.status !== 'running') throw new RuntimeError('cancelled', 'Swarm is no longer running.');
         const budget = this.store.budget(actor.swarmId);
@@ -49,7 +79,7 @@ export class BudgetAdmission {
           throw new RuntimeError('budget_exhausted', 'Remaining funds cannot cover another bounded request.');
         }
         if (!waiting) { this.store.setAgentStatus(actor, 'waiting'); waiting = true; }
-        await waitFor(150, signal);
+        await waitFor(150, admissionSignal);
       }
     } finally { release(); }
   }
@@ -97,6 +127,11 @@ export class RequestLiability {
     await this.reserve();
     const suppliedSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     this.options.signal.throwIfAborted(); suppliedSignal?.throwIfAborted();
+    try { this.options.admission.assertOpen(this.options.actor.swarmId); }
+    catch (cause) {
+      this.failure = cause instanceof RuntimeError ? cause : new RuntimeError('admission_failed', 'Request admission could not be verified.');
+      throw cause;
+    }
     this.attempted = true;
     return this.options.fetch(input, { ...init, signal: suppliedSignal ? AbortSignal.any([this.options.signal, suppliedSignal]) : this.options.signal, redirect: 'error' });
   }, { preconnect: globalThis.fetch.preconnect });
@@ -110,8 +145,11 @@ export class RequestLiability {
 
   uncertain(reason: string): void {
     if (!this.reservation) return;
-    if (this.attempted) this.options.store.markUncertain(this.reservation.id, reason);
-    else this.options.store.settle(this.reservation.id, 0, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    if (this.attempted) {
+      // Close admission even when persisting uncertainty fails; the reservation still covers it.
+      this.options.admission.trip(this.options.actor.swarmId);
+      this.options.store.markUncertain(this.reservation.id, reason);
+    } else this.options.store.settle(this.reservation.id, 0, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
     this.reservation = undefined;
   }
 }

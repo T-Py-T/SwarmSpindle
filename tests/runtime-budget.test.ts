@@ -35,7 +35,7 @@ describe('durable inference liability', () => {
     gate.validated(); await expect(gate.fetch('https://api.anthropic.com/v1/messages', { method: 'POST' })).rejects.toThrow('lost response');
     gate.uncertain('Disconnected'); gate.uncertain('Repeated callback');
     expect(store.budget(actor.swarmId)).toMatchObject({ uncertainMicros: 70, availableMicros: 30, reservedMicros: 0 });
-    await expect(admission.acquire(actor, 40, 'test', new AbortController().signal)).rejects.toThrow('Remaining funds');
+    await expect(admission.acquire(actor, 40, 'test', new AbortController().signal)).rejects.toThrow('unverified charges');
   });
   test('temporary concurrent reservations wait and settle before fair admission', async () => {
     const { store, actor, admission } = fixture(); const signal = new AbortController().signal;

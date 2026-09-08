@@ -34,6 +34,11 @@ export interface SwarmRecord {
 }
 export interface ThreadRecord { id: string; swarmId: string; title: string; createdAt: number; updatedAt: number; members: string[]; messageCount: number }
 export interface BoardMessage { id: number; swarmId: string; threadId: string; authorId: string; body: string; createdAt: number }
+/** Search cursors are global; BoardMessage.id remains local to its swarm. */
+export interface MessageSearchHit extends BoardMessage { searchId: number; swarmTitle: string; threadTitle: string; authorName: string }
+export interface MessageSearchOptions { query: string; swarmId?: string; authorId?: string; after?: number; limit?: number; through?: number }
+export interface MessageSearchPage { messages: MessageSearchHit[]; next: number | null; through: number }
+export interface MessageContext { thread: ThreadRecord; messages: BoardMessage[]; targetId: number }
 export interface TraceEvent { seq: number; swarmId: string; agentId: string | null; kind: string; createdAt: number; payload: Json }
 export interface Actor { swarmId: string; agentId: string }
 export interface FileClaim { path: string; ownerId: string; reason: string; expiresAt: number }
@@ -68,6 +73,9 @@ export interface SwarmStore {
   post(actor: Actor, threadId: string, body: string): BoardMessage;
   postOperator(swarmId: string, threadId: string, body: string): BoardMessage;
   messages(swarmId: string, threadId: string, after?: number): BoardMessage[];
+  /** Literal full-body substring search. ASCII case folding; Unicode is otherwise case-sensitive. Pages cap body bytes at 1 MiB, allowing at least one message. */
+  searchMessages(options: MessageSearchOptions): MessageSearchPage;
+  messageContext(swarmId: string, messageId: number): MessageContext;
   inbox(actor: Actor): BoardMessage[];
   claims(swarmId: string): FileClaim[];
   claimFiles(actor: Actor, paths: string[], reason: string, ttlMs?: number): FileClaim[];
