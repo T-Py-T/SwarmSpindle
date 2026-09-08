@@ -45,6 +45,14 @@ export function createWebServers(options: WebOptions) {
     if (request.method !== 'GET' && (request.headers.get('origin') !== origin || !equalSecret(request.headers.get('x-swarm-csrf') ?? '', token))) return json({ error: 'Same-origin confirmation missing.' }, 403);
     try {
       if (url.pathname === '/api/workers' && request.method === 'GET') return json(store.listWorkers());
+      if (url.pathname === '/api/messages/search' && request.method === 'GET') return json(store.searchMessages({
+        query: url.searchParams.get('query') ?? '',
+        swarmId: url.searchParams.get('swarm') ?? undefined,
+        authorId: url.searchParams.get('author') ?? undefined,
+        after: integerQuery(url.searchParams.get('after'), 0),
+        limit: integerQuery(url.searchParams.get('limit'), 20),
+        through: url.searchParams.has('through') ? integerQuery(url.searchParams.get('through'), 0) : undefined,
+      }));
       if (url.pathname === '/api/swarms' && request.method === 'GET') return json(store.listSwarms());
       if (url.pathname === '/api/swarms' && request.method === 'POST') return json(store.createSwarm(parseSwarmSpec(await readJson(request))), 201);
       const route = /^\/api\/swarms\/([^/]+)(?:\/(.*))?$/.exec(url.pathname);
@@ -71,6 +79,7 @@ export function createWebServers(options: WebOptions) {
         if (action === 'events') return eventStream(request, store, id, url.searchParams.get('after'), controlResponse);
         if (action === 'trace') return json(store.events(id, integerQuery(url.searchParams.get('after'), 0), 1000));
         if (action === 'messages') return json(store.messages(id, url.searchParams.get('thread') ?? '', integerQuery(url.searchParams.get('after'), 0)));
+        if (action === 'message-context') return json(store.messageContext(id, integerQuery(url.searchParams.get('message'), 0)));
         if (action === 'message-page') return json(messagePage(store.messages(id, url.searchParams.get('thread') ?? '', integerQuery(url.searchParams.get('after'), 0))));
         if (action === 'reservations') return json(store.reservations(id));
         if (action === 'history') return json(store.fileHistory(id, normalizeWorkspacePath(url.searchParams.get('path') ?? '')));

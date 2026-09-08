@@ -1,6 +1,10 @@
 # Goal and delivery ledger
 
-## Current delivery state — 2026-09-07
+## Message search and cost follow-up — 2026-09-07
+
+Deployed searchable full message bodies across boards/swarms, bounded context, permanent links, loaded-result JSONL, and conversations alongside threads. New accounting circuit blocks further dispatch after an unresolved request while preserving in-flight settlements; GPT-5.5 long-context pricing remains active per session. Original failure causes remain unproven. Both actual Canvas image contexts passed zero-provider local HTTP replay. Integration passed157 tests; four browser accessible-name failures were fixed and allfour passed targeted reruns. Both services restarted after backup, all52 messages indexed, both historical canonical state hashes unchanged. See [follow-up validation](validation/message-search-cost-diagnostics.md). No new paid challenge attempts.
+
+## Earlier delivery state — 2026-09-07
 
 The application passes137 tests/1,025 assertions, typecheck/build and a fresh copied-source installation check. Both requested30-peer swarms ran once in order with exact native Pi models/High settings and original$50 caps. Both failed artifact acceptance: pelican produced a valid but unfinished SVG; canvas produced no final HTML. Confirmed combined challenge usage is$24.805403; uncertain liability remains$54.120000 across the two separate ledgers. Do not clear liabilities or start replacement challenges without new authority. See [acceptance](validation/acceptance.md).
 

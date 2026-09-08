@@ -4,7 +4,7 @@ A local peer swarm built on [Pi](https://github.com/earendil-works/pi). Agents c
 
 The web service and worker run as separate processes on one Mac. Agent shell commands execute inside rootless Podman containers in a local Linux VM. Closing the browser does not stop the worker.
 
-**Status:** 137 tests and installation from a fresh public checkout pass. Both exact-model 30-agent rosters have returned real responses. Both runs ended at their budget guards: the pelican produced an unfinished SVG, and the canvas produced no final artifact. See the [honest challenge results](docs/validation/acceptance.md). See the [public delivery receipt](docs/validation/public-delivery.md), [delivery ledger](docs/GOAL.md), [requirements](tasks/prd-simple-swarm-system.md), and [validation receipts](docs/validation/first-integration.md).
+**Status:** All 161 current checks are accounted for after correcting four browser selector failures; see the [message search and cost validation](docs/validation/message-search-cost-diagnostics.md) for the full-run and targeted-rerun results. Installation from a fresh public checkout was verified for the initial release. Both exact-model 30-agent rosters have returned real responses. Both runs ended at their budget guards: the pelican produced an unfinished SVG, and the canvas produced no final artifact. See the [honest challenge results](docs/validation/acceptance.md). See the [public delivery receipt](docs/validation/public-delivery.md), [delivery ledger](docs/GOAL.md), [requirements](tasks/prd-simple-swarm-system.md), and [validation receipts](docs/validation/first-integration.md).
 
 ![Dashboard showing synthetic browser-test records](docs/images/dashboard-test-fixture.png)
 
@@ -89,9 +89,15 @@ bun run swarm export SWARM_ID ./new-export-directory
 
 Export writes the current workspace, a receipt with coordination and budget records, and an ordered trace. The destination must not already exist. See [operations](docs/OPERATIONS.md) for shutdown, recovery, backup, and troubleshooting.
 
+The **MESSAGE BOARD** view places conversations beside their threads. Use **Search message text** to find phrases anywhere in the original messages, choose the selected swarm or all swarms, and optionally filter by exact author ID (`operator` includes your posts). Each result opens nearby replies and a permanent link. **EXPORT LOADED RESULTS · JSONL** downloads full message bodies and provenance for the pages you have loaded. Search is literal and ignores ASCII case; it does not infer themes or intent.
+
+When upgrading an existing installation, stop both web and worker processes and back up the database first. Restart both from the same new checkout. The search projection backfills historical messages without changing their original IDs or accounting records; older worker versions do not maintain that projection.
+
 ## Understand the spending cap
 
 Each swarm has one ledger in integer microdollars. Before transmission, every model attempt reserves a conservative maximum. Successful responses settle to verified usage. Unknown or interrupted responses retain their full liability. This can stop a swarm while some nominal budget remains.
+
+A request with unresolved usage now closes admission for that swarm: no further model requests start, while requests already transmitted can still settle. The run reports failure with unverified charges, and the dashboard distinguishes verified spending, active reservations and unresolved liability. This does not refund historical failures or establish what the provider ultimately billed. GPT-5.5's long-context tariff stays active for the rest of a Pi session after crossing the documented threshold.
 
 At the default 16,000 requested output tokens, one Opus attempt reserves $5.40. A GPT-5.5 Codex attempt reserves $16.26 because Pi’s Codex transport does not enforce the requested output limit. The conservative reservations limit simultaneous provider requests; 30 agents do not imply 30 requests in flight. See [pricing evidence](docs/research/pricing.md).
 

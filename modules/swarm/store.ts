@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { z } from 'zod';
-import { SwarmError, normalizeWorkspacePath, type Actor, type AgentRecord, type FileChange, type FileVersion, type Json, type Reservation, type RunStatus, type SwarmRecord, type SwarmSpec, type SwarmStore, type TokenUsage, type WorkspaceFile } from './contracts.ts';
+import { SwarmError, normalizeWorkspacePath, type Actor, type AgentRecord, type BoardMessage, type FileChange, type FileVersion, type Json, type MessageContext, type MessageSearchHit, type MessageSearchOptions, type MessageSearchPage, type Reservation, type RunStatus, type SwarmRecord, type SwarmSpec, type SwarmStore, type TokenUsage, type WorkspaceFile } from './contracts.ts';
 import { parseSwarmSpec } from './spec.ts';
 import { budgetOf, stateSchema, sumSafe, usageSchema, workerSchema, type State, type StoredReservation } from './state.ts';
 
@@ -10,6 +10,7 @@ const MAX_WORKSPACE_BYTES = 100 * 1024 * 1024;
 const MAX_HISTORY_BYTES = 100 * 1024 * 1024;
 const terminalAgents = new Set(['done', 'bailed', 'failed', 'cancelled', 'stalled']);
 const terminalRuns = new Set(['completed', 'bailed', 'failed', 'cancelled', 'budget_exhausted', 'interrupted']);
+const searchHitSchema = z.object({ searchId: z.number().int().positive().safe(), id: z.number().int().positive().safe(), swarmId: z.string().min(1), threadId: z.string().min(1), authorId: z.string().min(1), body: z.string().min(1).max(200_000), createdAt: z.number().int().nonnegative().safe(), swarmTitle: z.string(), threadTitle: z.string(), authorName: z.string() });
 
 function requireValue(condition: unknown, code: string, message: string): asserts condition {
   if (!condition) throw new SwarmError(code, message);
@@ -134,6 +135,37 @@ class SqliteSwarmStore implements SwarmStore {
     this.database = new Database(path, { create: true, strict: true });
     this.database.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;');
     this.database.exec('CREATE TABLE IF NOT EXISTS swarms (id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS reservation_owners (id TEXT PRIMARY KEY, swarm_id TEXT NOT NULL);');
+    try { this.initializeMessageSearch(); }
+    catch (error) { this.database.close(); throw error; }
+  }
+  private initializeMessageSearch(): void {
+    // Run this upgrade with every writer on this version; older writers do not maintain the projection.
+    this.database.transaction(() => {
+      this.database.exec(`CREATE TABLE IF NOT EXISTS message_search (
+        search_id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER NOT NULL,
+        swarm_id TEXT NOT NULL, thread_id TEXT NOT NULL, author_id TEXT NOT NULL,
+        body TEXT NOT NULL, created_at INTEGER NOT NULL,
+        swarm_title TEXT NOT NULL, thread_title TEXT NOT NULL, author_name TEXT NOT NULL,
+        UNIQUE(swarm_id, message_id));
+        CREATE INDEX IF NOT EXISTS message_search_swarm_cursor ON message_search(swarm_id, search_id);
+        CREATE INDEX IF NOT EXISTS message_search_author_cursor ON message_search(author_id, search_id);`);
+      const swarms = this.database.query<{ id: string }, []>(`SELECT id FROM swarms
+        WHERE json_array_length(body, '$.messages') > (SELECT COUNT(*) FROM message_search WHERE swarm_id = swarms.id)
+        ORDER BY rowid`).all();
+      for (const { id } of swarms) {
+        const state = this.load(id);
+        const indexed = new Set(this.database.query<{ id: number }, [string]>('SELECT message_id AS id FROM message_search WHERE swarm_id = ?').all(id).map(message => message.id));
+        for (const message of state.messages) if (!indexed.has(message.id)) this.indexMessage(state, message);
+        for (const agent of state.agents) this.database.query('UPDATE message_search SET author_name = ? WHERE swarm_id = ? AND author_id = ?').run(agent.name, id, agent.id);
+      }
+    }).immediate();
+  }
+  private indexMessage(state: State, message: BoardMessage): void {
+    const thread = threadIn(state, message.threadId);
+    const authorName = message.authorId === 'operator' ? 'Operator' : actorIn(state, { swarmId: state.id, agentId: message.authorId }).name;
+    this.database.query(`INSERT INTO message_search
+      (message_id, swarm_id, thread_id, author_id, body, created_at, swarm_title, thread_title, author_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(message.id, state.id, message.threadId, message.authorId, message.body, message.createdAt, state.spec.title, thread.title, authorName);
   }
   close(): void { this.database.close(); }
   private now(): number { return integer(this.clock()); }
@@ -265,6 +297,7 @@ class SqliteSwarmStore implements SwarmStore {
     return this.mutate(actor.swarmId, state => {
       const agent = activeActor(state, actor); const next = text(name, 80);
       requireValue(!state.agents.some(candidate => candidate.id !== agent.id && candidate.name.toLocaleLowerCase() === next.toLocaleLowerCase()), 'name_taken', 'Agent names must be unique.');
+      this.database.query('UPDATE message_search SET author_name = ? WHERE swarm_id = ? AND author_id = ?').run(next, state.id, agent.id);
       agent.name = next; agent.updatedAt = this.now(); this.event(state, agent.id, 'agent_renamed', { name: next }); return agent;
     });
   }
@@ -317,6 +350,7 @@ class SqliteSwarmStore implements SwarmStore {
     const thread = threadIn(state, threadId);
     const message = { id: state.messages.length + 1, swarmId: state.id, threadId, authorId, body: text(body), createdAt: this.now() };
     state.messages.push(message); thread.messageCount += 1; thread.updatedAt = message.createdAt;
+    this.indexMessage(state, message);
     this.event(state, authorId === 'operator' ? null : authorId, 'message_posted', { threadId, messageId: message.id, body: message.body, authorId }); return message;
   }
   post(actor: Actor, threadId: string, body: string) {
@@ -328,6 +362,45 @@ class SqliteSwarmStore implements SwarmStore {
     return this.mutate(id, state => { requireValue(!terminalRuns.has(state.status), 'run_terminal', 'Swarm already ended.'); return this.postMessage(state, 'operator', threadId, body); });
   }
   messages(id: string, threadId: string, after = 0) { const state = this.load(id); threadIn(state, threadId); integer(after); return state.messages.filter(message => message.threadId === threadId && message.id > after); }
+  searchMessages(options: MessageSearchOptions): MessageSearchPage {
+    requireValue(typeof options.query === 'string', 'invalid_text', 'Search query is required.');
+    const query = text(options.query.trim(), 200);
+    const swarmId = options.swarmId === undefined ? null : text(options.swarmId, 200);
+    const authorId = options.authorId === undefined ? null : text(options.authorId, 200);
+    const after = integer(options.after ?? 0);
+    const limit = integer(options.limit ?? 20, 1);
+    requireValue(limit <= 50, 'invalid_limit', 'Search pages contain at most 50 messages.');
+    if (options.through !== undefined) integer(options.through);
+    return this.database.transaction(() => {
+      const maximum = this.database.query<{ maximum: number }, []>('SELECT COALESCE(MAX(search_id), 0) AS maximum FROM message_search').get()?.maximum ?? 0;
+      const through = options.through ?? maximum;
+      requireValue(through <= maximum, 'invalid_cursor', 'Search snapshot exceeds the current message high-water mark.');
+      const rows = this.database.query<MessageSearchHit, [number, number, string | null, string | null, string | null, string | null, string, number]>(`SELECT search_id AS searchId, message_id AS id, swarm_id AS swarmId, thread_id AS threadId,
+        author_id AS authorId, body, created_at AS createdAt, swarm_title AS swarmTitle, thread_title AS threadTitle, author_name AS authorName
+        FROM message_search WHERE search_id > ? AND search_id <= ?
+        AND (? IS NULL OR swarm_id = ?) AND (? IS NULL OR author_id = ?)
+        AND instr(lower(body), lower(?)) > 0 ORDER BY search_id ASC LIMIT ?`).all(after, through, swarmId, swarmId, authorId, authorId, query, limit + 1);
+      const parsed = z.array(searchHitSchema).safeParse(rows);
+      requireValue(parsed.success, 'corrupt_state', 'Stored message search projection is invalid.');
+      const messages: MessageSearchHit[] = [];
+      let bodyBytes = 0;
+      for (const message of parsed.data) {
+        const size = Buffer.byteLength(message.body);
+        if (messages.length === limit || (messages.length > 0 && bodyBytes + size > 1024 * 1024)) break;
+        messages.push(message); bodyBytes += size;
+      }
+      return { messages, next: parsed.data.length > messages.length ? messages.at(-1)?.searchId ?? null : null, through };
+    }).deferred();
+  }
+  messageContext(swarmId: string, messageId: number): MessageContext {
+    integer(messageId, 1);
+    const state = this.load(swarmId);
+    const target = state.messages.find(message => message.id === messageId);
+    requireValue(target, 'message_not_found', 'Message does not belong to this swarm.');
+    const messages = state.messages.filter(message => message.threadId === target.threadId);
+    const position = messages.findIndex(message => message.id === messageId);
+    return { thread: threadIn(state, target.threadId), messages: messages.slice(Math.max(0, position - 3), position + 4), targetId: messageId };
+  }
   inbox(actor: Actor) {
     return this.mutate(actor.swarmId, state => {
       actorIn(state, actor);
