@@ -1,4 +1,4 @@
-# Operate Simple Swarm System on one Mac
+# Operate SwarmSpindle on one Mac
 
 This guide describes the current implementation. Installation checks, deterministic tests, container tests, and real model acceptance prove different parts of the system. The [delivery ledger](GOAL.md) tracks outstanding release work.
 
@@ -246,3 +246,7 @@ Architecture details are in [ARCHITECTURE.md](ARCHITECTURE.md). Image execution 
 
 
 Each swarm retains at most 100 MiB of cumulative historical file contents. Revisions count even after deletion; restoring a nonempty version adds retained bytes. A changeset that would exceed the limit is rejected atomically, while prior history, budget reconciliation, and terminal recording remain available. This is a file-content quota, not a total database-size guarantee.
+
+## Existing installations
+
+SwarmSpindle retains the original internal `@simpleswarm/*` module names, `SWARM_*` settings, sandbox image/protocol identifiers, and `~/.local/share/simpleswarmsystem` data directory for compatibility. Existing experiments and budget liabilities remain visible after upgrading. Changing the public repository and display name does not reset any run or probe allocation.

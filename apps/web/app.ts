@@ -1,5 +1,9 @@
+import { describeRun, type OutcomeFilter } from './overview-model.ts';
+import { renderOverview, renderRunCard } from './overview.ts';
 import { createMessageSearch } from './message-search.ts';
 import type { AgentRecord, BoardMessage, FileClaim, FileVersion, SwarmRecord, ThreadRecord, TraceEvent } from '@simpleswarm/swarm';
+
+let outcomeFilter: OutcomeFilter = 'all';
 
 type View = 'swarms' | 'threads' | 'agents';
 interface Detail { run: SwarmRecord; threads: ThreadRecord[]; claims: FileClaim[]; files: FileVersion[] }
@@ -13,7 +17,7 @@ const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!
 const previewOrigin = document.querySelector<HTMLMetaElement>('meta[name="preview-origin"]')!.content;
 const state: { view: View; runs: SwarmRecord[]; selected: string | null; detail: Detail | null; events: TraceEvent[]; source: EventSource | null; dialog: { kind: string; id?: string } | null; threads: ThreadSummary[] } = { view: 'swarms', runs: [], selected: new URL(location.href).searchParams.get('swarm'), detail: null, events: [], source: null, dialog: null, threads: [] };
 const terminals = new Set(['completed', 'bailed', 'failed', 'cancelled', 'budget_exhausted', 'interrupted']);
-const palette = [['#e0e7da','#46654a'],['#e8dfd0','#8e6037'],['#dde3e8','#4c657f'],['#eadcdd','#90565f'],['#e4dfea','#735e8a'],['#dce8e3','#427766']];
+const palette = [['#e0f3ef','#126d60'],['#e6edff','#3555a2'],['#e1eff8','#266581'],['#f5e8ee','#91496a'],['#eee8fa','#7251a0'],['#fff0d7','#886122']];
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 let refreshing = false;
 let selectionVersion = 0;
@@ -55,23 +59,30 @@ function budget(run: SwarmRecord): string {
 }
 
 function render(): void {
+  const focusedOutcome = document.activeElement instanceof HTMLButtonElement ? document.activeElement.dataset.outcome : undefined;
   document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => button.classList.toggle('selected', button.dataset.view === state.view));
+  $('station-view-title').textContent = { swarms: 'Swarms', threads: 'Message board', agents: 'Agents' }[state.view];
   const run = state.detail?.run;
   $('message-search').hidden = state.view !== 'threads';
   $('board-conversation').hidden = state.view !== 'threads' || !conversation;
   $('board-layout').classList.toggle('with-conversation', state.view === 'threads' && Boolean(conversation));
   if (state.view !== 'swarms' && run) {
     const total = totals(run);
-    $('summary').innerHTML = `<div class="summary-top"><div><div class="eyebrow">${escape(run.id)} · ${duration(run)} · ${run.agents.length} agents</div><h1>${escape(run.spec.title)}</h1>${status(run.status)} <span class="pill">${escape(run.spec.model.id)} / ${escape(run.spec.model.thinking)}</span><div class="summary-actions"><button data-action="goal">STARTING GOAL</button><button data-action="files">FILES & CLAIMS</button><button data-action="trace">RAW TRACE</button>${terminals.has(run.status) ? '' : '<button data-action="stop" class="danger">STOP SWARM</button>'}</div>${run.reason ? `<p class="muted">${escape(run.reason)}</p>` : ''}</div><div class="stats"><div class="price">${dollars(run.budget.settledMicros)}</div><div class="muted">verified usage · USD-equivalent</div><div class="muted">${count(total.tokens)} tokens | ${count(total.calls)} calls</div></div></div>${budget(run)}${run.spec.workingTargetMicros === undefined ? '' : `<p class="budget-explanation">Working target ${dollars(run.spec.workingTargetMicros)} · ${dollars(Math.max(0, run.spec.workingTargetMicros - run.budget.settledMicros))} remaining against verified usage. Existing requests may finish above this target; the separate hard ceiling stays enforced.</p>`}`;
-  } else $('summary').innerHTML = `<div class="eyebrow">SHARED GOALS / INDEPENDENT PEERS</div><h1>Your swarms</h1><span class="muted">${state.runs.length} missions · ${state.runs.filter(run => !terminals.has(run.status)).length} active or queued</span>`;
+    $('summary').innerHTML = `<div class="summary-top"><div><div class="eyebrow">${escape(run.id)} · ${duration(run)} · ${run.agents.length} agents</div><h1>${escape(run.spec.title)}</h1>${status(run.status)} ${run.status === 'completed' ? '<span class="pill">Completion claimed · review required</span>' : ''}${describeRun(run).targetReached ? '<span class="pill">Working target reached</span>' : ''} <span class="pill">${escape(run.spec.model.id)} / ${escape(run.spec.model.thinking)}</span><div class="summary-actions"><button data-action="goal">STARTING GOAL</button><button data-action="files">FILES & CLAIMS</button><button data-action="trace">RAW TRACE</button>${terminals.has(run.status) ? '' : '<button data-action="stop" class="danger">STOP SWARM</button>'}</div>${run.status === 'completed' ? '<p class="budget-explanation">Agent completion is unverified. Review the canonical output against the definition of done before treating this as a successful result.</p>' : ''}${run.reason ? `<p class="muted">${escape(run.reason)}</p>` : ''}</div><div class="stats"><div class="price">${dollars(run.budget.settledMicros)}</div><div class="muted">verified usage · USD-equivalent</div><div class="muted">${count(total.tokens)} tokens | ${count(total.calls)} calls</div></div></div>${budget(run)}${run.spec.workingTargetMicros === undefined ? '' : `<p class="budget-explanation">Working target ${dollars(run.spec.workingTargetMicros)} · ${dollars(Math.max(0, run.spec.workingTargetMicros - run.budget.settledMicros))} remaining against verified usage. Existing requests may finish above this target; the separate hard ceiling stays enforced.</p>`}`;
+  } else $('summary').innerHTML = renderOverview(state.runs, outcomeFilter);
   $('sort-label').hidden = state.view !== 'threads'; $('filter-label').hidden = state.view !== 'threads';
   renderRows(); renderTimeline();
+  if (focusedOutcome) document.querySelectorAll<HTMLButtonElement>('[data-outcome]').forEach(button => { if (button.dataset.outcome === focusedOutcome) button.focus({ preventScroll: true }); });
   $('footer-status').textContent = run ? `${run.spec.model.id} / ${run.spec.model.thinking} · ${run.status} · ${duration(run)}` : 'No swarm selected';
 }
 function renderRows(): void {
   const query = $<HTMLInputElement>('search').value.toLowerCase();
   let rows: string[] = [];
-  if (state.view === 'swarms') rows = state.runs.filter(run => `${run.spec.title} ${run.spec.task} ${run.spec.model.id} ${run.status}`.toLowerCase().includes(query)).map(run => `<article class="row swarm-row"><div><button class="row-title" data-run="${escape(run.id)}">${escape(run.spec.title)} ↗</button><div class="preview-text">${escape(run.spec.task)}</div></div><div class="model-cell">${escape(run.spec.model.id)}<div class="row-meta">${run.agents.length} agents · ${escape(run.spec.model.thinking)}</div></div><div class="row-meta">${status(run.status)}<br>${duration(run)}</div><div class="row-right">${dollars(run.budget.settledMicros)}<div class="row-meta">/ ${dollars(run.budget.capMicros)}</div></div></article>`);
+  if (state.view === 'swarms') rows = state.runs.filter(run => {
+    const outcome = describeRun(run);
+    const matchesText = `${run.spec.title} ${run.spec.task} ${run.spec.model.id} ${run.status} ${outcome.label} ${run.reason ?? ''}`.toLowerCase().includes(query);
+    return matchesText && (outcomeFilter === 'all' || outcome.group === outcomeFilter);
+  }).map(renderRunCard);
   if (state.view === 'threads' && state.detail) {
     const filter = $<HTMLSelectElement>('filter').value; const sort = $<HTMLSelectElement>('sort').value;
     const threads = state.threads.filter(thread => {
@@ -81,7 +92,7 @@ function renderRows(): void {
     rows = threads.map(thread => `<article class="row thread-row ${Date.now()-thread.updatedAt > 60_000 ? 'dormant' : ''}"><div><button class="row-title" data-thread="${escape(thread.id)}">${escape(thread.title)}</button><div class="preview-text">${thread.lastMessage ? `${escape(agent(thread.lastMessage.authorId)?.name ?? thread.lastMessage.authorId)}: ${escape(thread.lastMessage.body)}` : 'No messages yet.'}</div><div class="row-meta">${thread.messageCount} messages · updated ${new Date(thread.updatedAt).toLocaleTimeString()}</div></div><div class="badges">${thread.members.slice(0,7).map(badge).join('')}${thread.members.length > 7 ? `<span class="badge">+${thread.members.length-7}</span>` : ''}</div><div class="row-right">${thread.members.length}<div class="row-meta">members</div></div></article>`);
   }
   if (state.view === 'agents' && state.detail) rows = state.detail.run.agents.filter(item => `${item.name} ${item.status} ${item.reason ?? ''}`.toLowerCase().includes(query)).map(item => `<article class="row agent-row"><div><button class="row-title" data-agent="${escape(item.id)}">${badge(item.id)}</button><div class="preview-text">${escape(item.reason ?? (item.sessionId ? 'Pi session connected' : 'Waiting for worker'))}</div></div><div>${status(item.status)}</div><div class="row-meta">${count(item.usage.input+item.usage.output+item.usage.cacheRead+item.usage.cacheWrite)} tokens<br>${count(item.toolCalls)} calls</div><div class="row-right">${dollars(item.costMicros)}</div></article>`);
-  $('content').innerHTML = rows.length ? `<div class="rows">${rows.join('')}</div>` : `<div class="empty"><strong>${state.view !== 'swarms' && !state.detail ? 'Select a swarm first' : query ? 'No signals match your search' : 'Nothing here yet'}</strong>${state.view === 'swarms' ? 'Start a swarm to give independent peers a shared mission.' : 'Choose a mission from SWARMS to explore its collaboration.'}</div>`;
+  $('content').innerHTML = rows.length ? `<div class="rows">${rows.join('')}</div>` : `<div class="empty"><strong>${state.view !== 'swarms' && !state.detail ? 'Select a swarm first' : query || (state.view === 'swarms' && outcomeFilter !== 'all') ? 'No signals match your search' : 'Nothing here yet'}</strong>${state.view === 'swarms' ? state.runs.length ? 'Choose All or change your search to see other swarms.' : 'Start a swarm to give independent peers a shared mission.' : 'Choose a mission from SWARMS to explore its collaboration.'}</div>`;
 }
 function renderTimeline(): void {
   if (state.view === 'swarms' || !state.detail) { $('timeline').innerHTML = ''; return; }
@@ -301,7 +312,9 @@ async function showDetail(kind: string, id?: string): Promise<void> {
 function goal(run: SwarmRecord, open = true): string { return `<details class="goal-block" ${open ? 'open' : ''}><summary>STARTING GOAL · ${escape(run.spec.finalOutput)}</summary><h3>TASK</h3><div class="prose">${escape(run.spec.task)}</div><h3>DEFINITION OF DONE</h3><div class="prose">${escape(run.spec.definitionOfDone)}</div></details>`; }
 function message(error: unknown): string { return error instanceof Error ? error.message : 'Something went wrong.'; }
 async function handleClick(event: MouseEvent): Promise<void> {
-  const button=(event.target as HTMLElement).closest<HTMLElement>('[data-view],[data-run],[data-thread],[data-agent],[data-action],[data-preview],[data-history]'); if(!button) return;
+  const button=(event.target as HTMLElement).closest<HTMLElement>('[data-view],[data-run],[data-thread],[data-agent],[data-action],[data-preview],[data-history],[data-outcome]'); if(!button) return;
+  const outcome = button.dataset.outcome;
+  if (outcome === 'all' || outcome === 'active' || outcome === 'review' || outcome === 'incomplete') { outcomeFilter = outcome; state.view = 'swarms'; render(); return; }
   if(button.dataset.view) { state.view=button.dataset.view as View; render(); if(state.view==='threads') await refreshThreads(); }
   if(button.dataset.run) await selectRun(button.dataset.run);
   if(button.dataset.thread) await showDetail('thread',button.dataset.thread);

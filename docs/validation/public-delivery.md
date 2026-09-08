@@ -1,5 +1,9 @@
 # Public delivery
 
+The successor repository is [SwarmSpindle](https://github.com/T-Py-T/SwarmSpindle). See [SwarmSpindle delivery](swarmspindle-delivery.md) for the rebrand and migration status. The receipt below records the original publication.
+
+## Original publication — 2026-09-07
+
 Repository: https://github.com/T-Py-T/simpleswarmsystem (public, default branch main).
 
 Published application commit: `b23594e0453a23eeab93904b4fe9bd4f1223a90c`. Job `job-mtrt69e3-41b82993` pushed this commit, cloned public main into a fresh directory, and passed locked installation, typecheck, build and all18 fresh-data web/worker checks. The public checkout matched the exact published commit. Snapshot:88 files, manifest SHA256 `5426432009c8ee93346e81d7bd0f86f594ace6357663369534aeb47e34ff014b`; installation/lifecycle check7.669seconds, graceful cleanup, no forced children, no provider calls.

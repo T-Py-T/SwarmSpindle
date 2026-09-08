@@ -250,7 +250,7 @@ async function servedAssets(origin: string): Promise<string> {
     return candidate.ok ? candidate : null;
   });
   const html = await response.text();
-  check(html.includes('<title>Simple Swarm System</title>') && html.includes('/app.js') && !html.includes('__CSRF__'), 'actual copied dashboard HTML served');
+  check(html.includes('<title>SwarmSpindle</title>') && html.includes('/app.js') && !html.includes('__CSRF__'), 'actual copied dashboard HTML served');
   const cookie = response.headers.get('set-cookie')?.split(';')[0];
   check(cookie, 'web bootstrap cookie issued');
   const script = await fetch(`${origin}/app.js`, { signal: AbortSignal.timeout(5000) });

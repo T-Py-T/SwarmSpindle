@@ -1,5 +1,9 @@
 # Goal and delivery ledger
 
+## SwarmSpindle migration and overview — 2026-09-08
+
+New public destination: https://github.com/T-Py-T/SwarmSpindle. Independent interface and identity pass 212 tests/1,775 assertions and a clean-install smoke. Overall outcome dashboard is implemented with 17 model cases and all 20 browser cases passing across the initial scope and affected reruns. Publication and old-repository retirement are recorded in the delivery receipt. All three original run records remain unchanged; neither original challenge nor the live probe has been promoted to successful artifact acceptance. See [current delivery](validation/swarmspindle-delivery.md). Historical entries below retain their original names and evidence.
+
 ## Message search and cost follow-up — 2026-09-07
 
 Deployed searchable full message bodies across boards/swarms, bounded context, permanent links, loaded-result JSONL, and conversations alongside threads. New accounting circuit blocks further dispatch after an unresolved request while preserving in-flight settlements; GPT-5.5 long-context pricing remains active per session. Original failure causes remain unproven. Both actual Canvas image contexts passed zero-provider local HTTP replay. Integration passed157 tests; four browser accessible-name failures were fixed and allfour passed targeted reruns. Both services restarted after backup, all52 messages indexed, both historical canonical state hashes unchanged. See [follow-up validation](validation/message-search-cost-diagnostics.md). No new paid challenge attempts.

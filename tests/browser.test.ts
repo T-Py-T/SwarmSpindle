@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { chromium, expect as browserExpect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { chromium, expect as browserExpect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openSwarmStore } from '@simpleswarm/swarm';
@@ -121,6 +121,148 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await mkdir(directory, { recursive: true });
     await page.screenshot({ path: join(directory, name), fullPage: true });
   }
+
+  async function expectWithinViewportWidth(locator: Locator): Promise<void> {
+    await browserExpect(locator).toBeVisible();
+    const bounds = await locator.boundingBox();
+    if (!bounds) throw new Error('Expected a visible control with measurable bounds.');
+    const width = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(bounds.width).toBeGreaterThan(0);
+    expect(bounds.x).toBeGreaterThanOrEqual(-1);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width + 1);
+  }
+
+  async function expectNoDocumentHorizontalOverflow(): Promise<void> {
+    const dimensions = await page.evaluate(() => ({
+      content: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport + 1);
+  }
+
+  test('overview distinguishes completion claims, budget stops and queue state while filters survive refresh', async () => {
+    const completed = await seedRunningSwarm('Claimed result');
+    for (const peer of completed.run.agents) fixture.store.endAgent({ swarmId: completed.run.id, agentId: peer.id }, 'done', 'Artifact ready for independent review', 'index.html');
+    fixture.store.finishSwarm(completed.run.id, 'completed', 'All peers reported done.');
+    const stopped = await seedRunningSwarm('Budget gate');
+    const pending = fixture.store.reserve(stopped.actor, 200_000, 'Unknown final response usage');
+    fixture.store.markUncertain(pending.id, 'No verified final usage.');
+    fixture.store.finishSwarm(stopped.run.id, 'budget_exhausted', 'The next bounded request does not fit.');
+    const queued = await fixture.launch({ title: 'Queued experiment' });
+    await page.goto(servers.origin);
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(3);
+    await page.getByRole('button', { name: 'AGENTS', exact: true }).click();
+    await page.locator('[data-outcome="all"]').click();
+    await browserExpect(page.getByRole('button', { name: 'SWARMS', exact: true })).toHaveClass('selected');
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(3);
+    for (const group of ['active', 'review', 'incomplete']) await browserExpect(page.locator(`[data-outcome="${group}"]`)).toContainText('1');
+    const budgetCard = page.locator('.swarm-row').filter({ has: page.locator(`[data-run="${stopped.run.id}"]`) });
+    await browserExpect(budgetCard).toContainText('The next bounded request does not fit.');
+    await browserExpect(budgetCard).toContainText('$0.20');
+    await browserExpect(page.locator('#summary')).toContainText('$0.25');
+    await page.locator('[data-outcome="active"]').focus();
+    await page.keyboard.press('Enter');
+    await browserExpect(page.locator('[data-outcome="active"]')).toBeFocused();
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(1);
+    fixture.store.stopSwarm(queued.id, 'Cancelled while queued.');
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(0, { timeout: 10000 });
+    await browserExpect(page.locator('[data-outcome="active"]')).toHaveAttribute('aria-pressed', 'true');
+    await browserExpect(page.locator('[data-outcome="active"]')).toBeFocused();
+    await page.locator('[data-outcome="incomplete"]').click();
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(2);
+    await page.locator('#search').fill('Budget gate');
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(1);
+    await page.locator('#search').fill('');
+    await page.locator('[data-outcome="review"]').click();
+    await page.locator(`[data-run="${completed.run.id}"]`).click();
+    await browserExpect(page.locator('#summary')).toContainText('Agent completion is unverified');
+    await page.getByRole('button', { name: 'FILES & CLAIMS', exact: true }).click();
+    await browserExpect(page.locator('#detail .file-row')).toHaveCount(1);
+  }, 30000);
+
+  test('overview keeps hostile long run details and outcome controls inside a phone viewport', async () => {
+    const title = 'Overview ' + 'long-reference-'.repeat(8);
+    const run = await fixture.launch({ title });
+    fixture.store.finishSwarm(run.id, 'failed', '<img src=x onerror=alert(1)>' + 'unbroken'.repeat(60));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(servers.origin);
+    await browserExpect(page.locator('.swarm-row')).toHaveCount(1);
+    await browserExpect(page.locator('.swarm-row')).toContainText('<img src=x onerror=alert(1)>');
+    await browserExpect(page.locator('.swarm-row img')).toHaveCount(0);
+    await expectNoDocumentHorizontalOverflow();
+    for (const group of ['all', 'active', 'review', 'incomplete']) await expectWithinViewportWidth(page.locator(`[data-outcome="${group}"]`));
+    await page.locator('[data-outcome="incomplete"]').click();
+    await page.locator(`[data-run="${run.id}"]`).click();
+    await browserExpect(page.locator('#summary h1')).toHaveText(title);
+    await expectNoDocumentHorizontalOverflow();
+  }, 30000);
+
+  test('identifies SwarmSpindle and keeps desktop workspace navigation beside the active workspace', async () => {
+    const { run } = await seedRunningSwarm('Station navigation acceptance');
+    await selectSwarm(run.id);
+    await browserExpect(page).toHaveTitle('SwarmSpindle');
+    const navigation = page.getByRole('navigation', { name: 'Workspace', exact: true });
+    const main = page.getByRole('main');
+    await browserExpect(navigation).toBeVisible();
+    const navBounds = await navigation.boundingBox();
+    const mainBounds = await main.boundingBox();
+    if (!navBounds || !mainBounds) throw new Error('Expected measurable workspace navigation and main content.');
+    expect(navBounds.width).toBeGreaterThan(0);
+    expect(navBounds.x + navBounds.width).toBeLessThanOrEqual(mainBounds.x + 1);
+    expect(Math.min(navBounds.y + navBounds.height, mainBounds.y + mainBounds.height))
+      .toBeGreaterThan(Math.max(navBounds.y, mainBounds.y));
+    await navigation.getByRole('button', { name: 'AGENTS', exact: true }).click();
+    await browserExpect(page.locator('.agent-row')).toHaveCount(2);
+    await navigation.getByRole('button', { name: 'SWARMS', exact: true }).click();
+    await browserExpect(page.locator(`[data-run="${run.id}"]`)).toBeVisible();
+    await page.locator(`[data-run="${run.id}"]`).click();
+    await browserExpect(navigation.getByRole('button', { name: 'MESSAGE BOARD', exact: true })).toHaveClass('selected');
+    await expectNoDocumentHorizontalOverflow();
+  }, 30000);
+
+  test('keeps a phone conversation and a scrollable launch form usable within the viewport', async () => {
+    const { run, actor, thread } = await seedRunningSwarm('Phone conversation and launch acceptance');
+    fixture.store.post(actor, thread.id, `Review this long artifact reference: ${'artifact-reference-'.repeat(60)}`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await selectSwarm(run.id);
+    await page.locator(`[data-thread="${thread.id}"]`).click();
+    await browserExpect(page.locator('#board-title')).toHaveText(thread.title);
+    await expectWithinViewportWidth(page.locator('#board-conversation'));
+    await expectNoDocumentHorizontalOverflow();
+    const composer = page.getByLabel('Message to this thread', { exact: true });
+    await composer.fill('Phone operator: inspect the final artifact before completion.');
+    await expectWithinViewportWidth(composer);
+    await page.getByRole('button', { name: 'POST MESSAGE', exact: true }).click();
+    await browserExpect(page.locator('#conversation-messages .message').last()).toContainText('Phone operator:');
+    expect(fixture.store.messages(run.id, thread.id).at(-1)?.authorId).toBe('operator');
+    await expectNoDocumentHorizontalOverflow();
+
+    await page.getByRole('button', { name: '+ NEW SWARM', exact: true }).click();
+    const launch = page.locator('#launch');
+    await expectWithinViewportWidth(launch);
+    expect(await launch.evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true);
+    await launch.getByLabel('Title', { exact: true }).fill('Queued from a phone');
+    await launch.getByLabel('Task', { exact: true }).fill('Create a small reviewed SVG.');
+    await launch.getByLabel('Definition of done', { exact: true }).fill('The SVG is valid and independently reviewed.');
+    await launch.getByLabel('Final output file', { exact: true }).fill('phone.svg');
+    const queue = launch.getByRole('button', { name: 'QUEUE SWARM', exact: true });
+    await queue.scrollIntoViewIfNeeded();
+    await expectWithinViewportWidth(queue);
+    const bounds = await queue.boundingBox();
+    if (!bounds) throw new Error('Expected a reachable queue button.');
+    const height = await page.evaluate(() => document.documentElement.clientHeight);
+    expect(bounds.y).toBeGreaterThanOrEqual(-1);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(height + 1);
+    await expectNoDocumentHorizontalOverflow();
+    await queue.click();
+    await browserExpect(launch).not.toBeVisible();
+    await browserExpect(page.locator('#summary h1')).toHaveText('Queued from a phone');
+    const queued = fixture.store.listSwarms().filter(item => item.spec.title === 'Queued from a phone');
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({ status: 'queued', spec: { finalOutput: 'phone.svg', agentCount: 2 } });
+    expect(queued[0]?.agents.every(agent => agent.sessionId === null)).toBe(true);
+    await expectNoDocumentHorizontalOverflow();
+  }, 30000);
 
   async function searchMessages(query: string, scope = 'selected', author = ''): Promise<void> {
     const search = page.locator('#message-search');

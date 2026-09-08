@@ -7,7 +7,7 @@ import { ensureDataDirectory, readConfig } from '../shared/config.ts';
 import { parseDollars, parseModel, parsePrompt } from '../shared/prompt.ts';
 import { readSeedDirectory } from '../shared/seeds.ts';
 
-const help = `Simple Swarm System
+const help = `SwarmSpindle
 
   bun run swarm COUNT MODEL BUDGET PROMPT_PATH [--seed-dir DIRECTORY] [--working-target USD]
   bun run swarm status [SWARM_ID]
