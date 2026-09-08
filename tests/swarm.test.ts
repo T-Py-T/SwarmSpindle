@@ -30,6 +30,17 @@ function errorCode(action: () => unknown, code: string) {
 afterEach(() => { for (const store of stores.splice(0)) store.close(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe('specification and durable lifecycle', () => {
+  test('working targets are optional, durable and never exceed the independent hard ceiling', () => {
+    const f = fixture();
+    const omitted = f.store.createSwarm(spec({ workingTargetMicros: undefined }));
+    expect(Object.hasOwn(omitted.spec, 'workingTargetMicros')).toBe(false);
+    const targeted = f.store.createSwarm(spec({ budgetMicros: 6_000_000, workingTargetMicros: 250_000, agentCount: 2 }));
+    const reopened = openSwarmStore(f.path); stores.push(reopened);
+    expect(reopened.getSwarm(targeted.id).spec.workingTargetMicros).toBe(250_000);
+    const before = f.store.listSwarms().length;
+    for (const target of [0, -1, 0.5, 6_000_001]) errorCode(() => f.store.createSwarm(spec({ budgetMicros: 6_000_000, workingTargetMicros: target })), 'invalid_spec');
+    expect(f.store.listSwarms()).toHaveLength(before);
+  });
   test('retains exact challenge configuration and rejects missing done criteria', () => {
     const parsed = spec(); expect(parsed.agentCount).toBe(30); expect(parsed.model).toEqual({ provider: 'anthropic', id: 'claude-opus-4-8', thinking: 'high' }); expect(parsed.budgetMicros).toBe(50_000_000);
     expect(spec({ model: { provider: 'openai-codex', id: 'gpt-5.5', thinking: 'high' } }).model.id).toBe('gpt-5.5');

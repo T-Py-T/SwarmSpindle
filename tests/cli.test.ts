@@ -25,12 +25,60 @@ describe('operator launch contract',()=>{
   test('queues exact thirty-agent settings and persists status without model work',async()=>{
     const root=await fixture();const launch=await cli(root,'30','opus48','50',join(root,'prompt.md'));expect(launch.code).toBe(0);
     const receipt=JSON.parse(launch.stdout);expect(receipt.agents).toBe(30);expect(receipt.capUsdEquivalent).toBe(50);expect(receipt.model).toEqual({provider:'anthropic',id:'claude-opus-4-8',thinking:'high'});
+    expect(receipt.workingTargetUsdEquivalent).toBeNull();
     const status=await cli(root,'status',receipt.id);expect(status.code).toBe(0);const run=JSON.parse(status.stdout);expect(run.status).toBe('queued');expect(run.agents).toHaveLength(30);expect(run.agents.every((agent:{sessionId:null})=>agent.sessionId===null)).toBe(true);expect(run.spec.finalOutput).toBe('pelican.svg');
+    expect(Object.hasOwn(run.spec,'workingTargetMicros')).toBe(false);
     const stop=await cli(root,'stop',receipt.id);expect(stop.code).toBe(0);expect(JSON.parse(stop.stdout).status).toBe('cancelled');
   });
   test('invalid launches do not create a swarm',async()=>{
     const root=await fixture();for(const args of [['0','opus48','50'],['30','latest','50'],['30','gpt55','-1']])expect((await cli(root,...args,join(root,'prompt.md'))).code).toBe(1);
     expect(JSON.parse((await cli(root,'status')).stdout).swarms).toEqual([]);
+  });
+  test('persists positive working targets up to the separate hard ceiling without starting agents',async()=>{
+    const root=await fixture();
+    for(const target of ['0.25','6']) {
+      const launch=await cli(root,'launch','2','opus48','6',join(root,'prompt.md'),'--working-target',target);
+      expect(launch.code).toBe(0);
+      const receipt=JSON.parse(launch.stdout);
+      expect(receipt).toMatchObject({status:'queued',agents:2,capUsdEquivalent:6,workingTargetUsdEquivalent:Number(target)});
+      const status=await cli(root,'status',receipt.id);expect(status.code).toBe(0);
+      const run=JSON.parse(status.stdout);
+      expect(run.spec).toMatchObject({budgetMicros:6_000_000,workingTargetMicros:parseDollars(target)});
+      expect(run.agents.every((agent:{sessionId:null})=>agent.sessionId===null)).toBe(true);
+    }
+  });
+  test('rejects invalid, missing, duplicated and unknown target flags without queuing any run',async()=>{
+    const root=await fixture();
+    const cases=[
+      ...['0','-1','6.01','NaN','1e0','0.001',''].map(value=>['--working-target',value]),
+      ['--working-target'],
+      ['--working-target','0.25','--working-target','0.50'],
+      ['--seed-dir',root,'--seed-dir',root,'--working-target','0.25'],
+      ['--unknown-target','0.25'],
+    ];
+    for(const flags of cases) {
+      const launch=await cli(root,'2','opus48','6',join(root,'prompt.md'),...flags);
+      expect(launch.code).toBe(1);expect(launch.stderr.trim().length).toBeGreaterThan(0);
+      const status=await cli(root,'status');expect(status.code).toBe(0);
+      expect(JSON.parse(status.stdout).swarms).toEqual([]);
+    }
+  });
+  test('accepts seed directory and working target flags in either order with byte-exact seeds',async()=>{
+    const root=await fixture();const seeds=join(root,'seed directory');await mkdir(seeds);
+    const bytes=Buffer.from([0,255,1,42,128]);await writeFile(join(seeds,'reference.bin'),bytes);
+    for(const flags of [
+      ['--seed-dir',seeds,'--working-target','0.25'],
+      ['--working-target','0.25','--seed-dir',seeds],
+    ]) {
+      const launch=await cli(root,'2','opus48','6',join(root,'prompt.md'),...flags);expect(launch.code).toBe(0);
+      const receipt=JSON.parse(launch.stdout);
+      const store=openSwarmStore(join(root,'data/swarm.sqlite'));
+      try {
+        expect(store.getSwarm(receipt.id)).toMatchObject({status:'queued',spec:{budgetMicros:6_000_000,workingTargetMicros:250_000}});
+        expect(Buffer.from(store.readFile(receipt.id,'reference.bin').contentBase64,'base64')).toEqual(bytes);
+        expect(store.reservations(receipt.id)).toEqual([]);
+      } finally {store.close();}
+    }
   });
   test('uses a fallback title when a valid prompt begins with an empty heading',async()=>{
     const root=await fixture();await writeFile(join(root,'prompt.md'),prompt.replace('# Pelican mission','#'));

@@ -9,7 +9,7 @@ import { readSeedDirectory } from '../shared/seeds.ts';
 
 const help = `Simple Swarm System
 
-  bun run swarm COUNT MODEL BUDGET PROMPT_PATH [--seed-dir DIRECTORY]
+  bun run swarm COUNT MODEL BUDGET PROMPT_PATH [--seed-dir DIRECTORY] [--working-target USD]
   bun run swarm status [SWARM_ID]
   bun run swarm stop SWARM_ID
   bun run swarm export SWARM_ID NEW_DIRECTORY
@@ -17,6 +17,7 @@ const help = `Simple Swarm System
 
 Models: opus48 = Opus 4.8 High; gpt55 = GPT-5.5 High.
 Budget: one shared USD-equivalent cap, e.g. 50.
+Working target: optional smaller verified-usage stop threshold; in-flight requests may finish above it within the hard cap.
 Prompt: Markdown containing "Final output: file.ext" and "## Definition of Done".
 Run "bun run web" and "bun run worker" in separate terminals.
 Storage: SWARM_DATA_DIR (default ~/.local/share/simpleswarmsystem).
@@ -66,14 +67,22 @@ try {
     } finally { await runtime.dispose(); }
   } else {
     const launch = command === 'launch' ? args.slice(1) : args;
-    if (launch.length !== 4 && !(launch.length === 6 && launch[4] === '--seed-dir')) throw new Error('Use COUNT MODEL BUDGET PROMPT_PATH [--seed-dir DIRECTORY].');
+    if (launch.length < 4 || launch.length % 2 !== 0) throw new Error('Use COUNT MODEL BUDGET PROMPT_PATH [--seed-dir DIRECTORY] [--working-target USD].');
+    const flags = new Map<string, string>();
+    for (let index = 4; index < launch.length; index += 2) {
+      const flag = launch[index]; const value = launch[index + 1];
+      if (!flag || !['--seed-dir', '--working-target'].includes(flag) || !value || flags.has(flag)) throw new Error('Unknown, duplicated or incomplete launch option.');
+      flags.set(flag, value);
+    }
     const [count, model, budget, promptPath] = launch as [string,string,string,string];
     if (!/^\d+$/.test(count)) throw new Error('Agent count must be a positive integer.');
     const prompt = parsePrompt(await Bun.file(resolve(promptPath)).text());
-    const seeds = launch[5] ? await readSeedDirectory(launch[5]) : [];
+    const seedDirectory = flags.get('--seed-dir');
+    const seeds = seedDirectory ? await readSeedDirectory(seedDirectory) : [];
+    const workingTarget = flags.get('--working-target');
     const title = prompt.task.split('\n').find(line=>line.trim())?.replace(/^#+\s*/, '').trim().slice(0,160) || 'New swarm';
-    const run = store.createSwarm(parseSwarmSpec({ ...prompt, title,agentCount:Number(count),model:parseModel(model),budgetMicros:parseDollars(budget),maxOutputTokens:16000 }), seeds);
-    console.log(JSON.stringify({id:run.id,status:run.status,model:run.spec.model,agents:run.spec.agentCount,capUsdEquivalent:run.spec.budgetMicros/1_000_000,dashboard:`http://127.0.0.1:${config.port}/?swarm=${run.id}`},null,2));
+    const run = store.createSwarm(parseSwarmSpec({ ...prompt, title,agentCount:Number(count),model:parseModel(model),budgetMicros:parseDollars(budget),...(workingTarget === undefined ? {} : { workingTargetMicros: parseDollars(workingTarget) }),maxOutputTokens:16000 }), seeds);
+    console.log(JSON.stringify({id:run.id,status:run.status,model:run.spec.model,agents:run.spec.agentCount,capUsdEquivalent:run.spec.budgetMicros/1_000_000,workingTargetUsdEquivalent:run.spec.workingTargetMicros === undefined ? null : run.spec.workingTargetMicros/1_000_000,dashboard:`http://127.0.0.1:${config.port}/?swarm=${run.id}`},null,2));
   }
 } catch (error) { console.error(error instanceof Error ? error.message : 'Command failed.'); process.exitCode=1; }
 finally { store.close(); }

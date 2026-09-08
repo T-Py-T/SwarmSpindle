@@ -516,6 +516,7 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await launch.getByLabel('Model', { exact: true }).selectOption('gpt55');
     await launch.getByLabel('Agents', { exact: true }).fill('30');
     await launch.getByLabel('Shared USD-equivalent cap', { exact: true }).fill('50');
+    await launch.getByLabel('Working target (USD-equivalent, optional)', { exact: true }).fill('');
     await launch.getByLabel('Task', { exact: true }).fill('Create a reviewed canvas animation.');
     await launch.getByLabel('Final output file', { exact: true }).fill('hero.html');
     await launch.getByRole('button', { name: 'QUEUE SWARM', exact: true }).click();
@@ -536,6 +537,69 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     const runs = fixture.store.listSwarms();
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ status: 'queued', spec: { agentCount: 30, budgetMicros: 50_000_000, model: { provider: 'openai-codex', id: 'gpt-5.5', thinking: 'high' }, finalOutput: 'hero.html' } });
+    expect(Object.hasOwn(runs[0]!.spec, 'workingTargetMicros')).toBe(false);
+  }, 30000);
+
+  test('defaults to a two-agent Opus experiment with a separate working target and persists its displayed values', async () => {
+    await page.goto(servers.origin, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: '+ NEW SWARM', exact: true }).click();
+    const launch = page.locator('#launch');
+    await browserExpect(launch.getByLabel('Model', { exact: true })).toHaveValue('opus48');
+    await browserExpect(launch.getByLabel('Agents', { exact: true })).toHaveValue('2');
+    await browserExpect(launch.getByLabel('Shared USD-equivalent cap', { exact: true })).toHaveValue('6');
+    await browserExpect(launch.getByLabel('Working target (USD-equivalent, optional)', { exact: true })).toHaveValue('0.25');
+    await launch.getByLabel('Title', { exact: true }).fill('Working target browser fixture');
+    await launch.getByLabel('Task', { exact: true }).fill('Create one small reviewed SVG.');
+    await launch.getByLabel('Definition of done', { exact: true }).fill('The SVG is valid and reviewed before explicit completion.');
+    await launch.getByLabel('Final output file', { exact: true }).fill('fixture.svg');
+    const queuedResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/swarms');
+    await launch.getByRole('button', { name: 'QUEUE SWARM', exact: true }).click();
+    const response = await queuedResponse;
+    expect(response.ok()).toBe(true);
+    expect(response.request().postDataJSON()).toMatchObject({ agentCount: 2, budgetMicros: 6_000_000, workingTargetMicros: 250_000 });
+    await browserExpect(launch).not.toBeVisible();
+    await browserExpect(page.locator('#summary h1')).toHaveText('Working target browser fixture');
+    await browserExpect(page.locator('#summary')).toContainText('Working target $0.25');
+    await browserExpect(page.locator('#summary')).toContainText('$0.25 remaining against verified usage');
+    await browserExpect(page.locator('#summary .budget-labels')).toContainText('$6.00 cap');
+    const runs = fixture.store.listSwarms();expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ status: 'queued', spec: { agentCount: 2, budgetMicros: 6_000_000, workingTargetMicros: 250_000, model: { provider: 'anthropic', id: 'claude-opus-4-8', thinking: 'high' } } });
+    expect(runs[0]!.agents.every(agent => agent.sessionId === null)).toBe(true);
+    expect(fixture.store.reservations(runs[0]!.id)).toEqual([]);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await browserExpect(page.locator('#summary h1')).toHaveText('Working target browser fixture');
+    await browserExpect(page.locator('#summary')).toContainText('Working target $0.25');
+    await screenshot('fixture-working-target.png');
+  }, 30000);
+
+  test('the server rejects a working target above the hard ceiling and clearing it omits the setting', async () => {
+    await page.goto(servers.origin, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: '+ NEW SWARM', exact: true }).click();
+    const launch = page.locator('#launch');
+    await launch.getByLabel('Title', { exact: true }).fill('Optional target browser fixture');
+    await launch.getByLabel('Task', { exact: true }).fill('Create a small reviewed SVG.');
+    await launch.getByLabel('Definition of done', { exact: true }).fill('The SVG passes review and agents explicitly finish.');
+    await launch.getByLabel('Final output file', { exact: true }).fill('fixture.svg');
+    await launch.getByLabel('Working target (USD-equivalent, optional)', { exact: true }).fill('6.01');
+    const rejectedResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/swarms');
+    await launch.getByRole('button', { name: 'QUEUE SWARM', exact: true }).click();
+    const rejected = await rejectedResponse;
+    expect(rejected.status()).toBe(400);
+    expect(rejected.request().postDataJSON()).toMatchObject({ budgetMicros: 6_000_000, workingTargetMicros: 6_010_000 });
+    await browserExpect(launch).toBeVisible();
+    await browserExpect(page.locator('#launch-error')).toContainText(/working target/i);
+    expect(fixture.store.listSwarms()).toEqual([]);
+    await launch.getByLabel('Working target (USD-equivalent, optional)', { exact: true }).fill('');
+    const queuedResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/swarms');
+    await launch.getByRole('button', { name: 'QUEUE SWARM', exact: true }).click();
+    const queued = await queuedResponse;expect(queued.ok()).toBe(true);
+    expect(Object.hasOwn(queued.request().postDataJSON(), 'workingTargetMicros')).toBe(false);
+    await browserExpect(launch).not.toBeVisible();
+    await browserExpect(page.locator('#summary h1')).toHaveText('Optional target browser fixture');
+    await browserExpect(page.locator('#summary')).not.toContainText('Working target');
+    const runs = fixture.store.listSwarms();expect(runs).toHaveLength(1);
+    expect(Object.hasOwn(runs[0]!.spec, 'workingTargetMicros')).toBe(false);
+    expect(runs[0]!.spec.budgetMicros).toBe(6_000_000);
   }, 30000);
 
   test('renders hostile agent text literally and requires a confirmed stop with durable effect', async () => {

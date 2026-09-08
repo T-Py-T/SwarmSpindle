@@ -3,6 +3,7 @@ import { openSwarmStore, parseSwarmSpec, type SwarmStore } from '@simpleswarm/sw
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { Sandbox, SandboxResult } from '@simpleswarm/sandbox';
 import { createSwarmTools, type AgentCompletion } from '../modules/runtime/tools.ts';
+import { budgetAwareness } from '../modules/runtime/budget-awareness.ts';
 
 const unused = (): never => { throw new Error('Swarm tools must not use Pi extension context'); };
 const noExtensionContext: ExtensionContext = {
@@ -73,4 +74,44 @@ test('bail remains distinct from successful done', async () => {
   const { invoke, completion } = fixture();
   await invoke('done', { done_reasoning: 'Reference is missing.', bail: true });
   expect(completion()?.status).toBe('bailed');
+});
+
+test('budget returns one current assessment and its immutable observation event without changing the ledger', async () => {
+  const { store, run, actor, invoke } = fixture();
+  const own = store.reserve(actor, 1_000_000, 'Synthetic tool observation');
+  store.settle(own.id, 543_210, { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 });
+  const held = store.reserve(actor, 1_000_000, 'Synthetic temporary reservation');
+  const uncertain = store.reserve(actor, 2_000_000, 'Synthetic unknown usage');
+  store.markUncertain(uncertain.id, 'Fixture connection loss');
+  const before = store.getSwarm(run.id); const ledger = store.reservations(run.id); const events = store.events(run.id);
+  const expected = budgetAwareness(before, actor);
+  const originalGet = store.getSwarm.bind(store); let reads = 0;
+  store.getSwarm = id => { reads++; return originalGet(id); };
+  let result: Awaited<ReturnType<typeof invoke>>;
+  try { result = await invoke('budget', {}); }
+  finally { store.getSwarm = originalGet; }
+  expect(reads).toBe(1);
+  const part = result.content.find(item => item.type === 'text');
+  if (!part || part.type !== 'text') throw new Error('Expected budget text output.');
+  const returned: unknown = JSON.parse(part.text);
+  const observation = store.events(run.id).at(-1);
+  if (!observation) throw new Error('Expected a persisted budget observation.');
+  expect(observation).toMatchObject({ seq: events.length + 1, kind: 'budget_observed', agentId: actor.agentId, swarmId: run.id });
+  expect(observation.payload).toEqual({ ...expected });
+  expect(returned).toEqual({ ...expected, observationSeq: observation.seq });
+  expect(store.reservations(run.id)).toEqual(ledger); expect(store.getSwarm(run.id)).toEqual(before);
+  expect(store.events(run.id).slice(0, -1)).toEqual(events);
+  store.settle(held.id, 100_000, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 });
+  expect(store.events(run.id).find(event => event.seq === observation.seq)?.payload).toEqual(observation.payload);
+  expect(returned).toEqual({ ...expected, observationSeq: observation.seq });
+});
+
+test('budget does not claim an observation when its event cannot be persisted', async () => {
+  const { store, run, invoke } = fixture();
+  const before = store.getSwarm(run.id); const events = store.events(run.id);
+  const originalAppend = store.appendEvent.bind(store);
+  store.appendEvent = () => { throw new Error('Synthetic observation write failure'); };
+  try { await expect(invoke('budget', {})).rejects.toThrow('observation write failure'); }
+  finally { store.appendEvent = originalAppend; }
+  expect(store.getSwarm(run.id)).toEqual(before); expect(store.events(run.id)).toEqual(events);
 });
