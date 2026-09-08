@@ -15,14 +15,16 @@ export const specSchema = z.object({
     z.object({ provider: z.literal('openai-codex'), id: z.literal('gpt-5.5'), thinking: z.literal('high') }).strict(),
   ]),
   budgetMicros: microdollars.refine(value => value > 0),
+  workingTargetMicros: microdollars.refine(value => value > 0).optional(),
   maxOutputTokens: z.number().int().min(1024).max(128_000).default(16000),
   maxTurnsPerAgent: z.number().int().min(1).max(10000).default(100),
   maxRunMs: z.number().int().min(1000).max(604_800_000).default(3_600_000),
   idleTimeoutMs: z.number().int().min(1000).max(86_400_000).default(120_000),
-}).strict();
+}).strict().refine(value => value.workingTargetMicros === undefined || value.workingTargetMicros <= value.budgetMicros, { message: 'Working target must not exceed the hard spending ceiling.', path: ['workingTargetMicros'] });
 
 export function parseSwarmSpec(input: unknown): z.output<typeof specSchema> {
   const result = specSchema.safeParse(input);
   if (!result.success) throw new SwarmError('invalid_spec', result.error.message);
+  if (result.data.workingTargetMicros === undefined) delete result.data.workingTargetMicros;
   return result.data;
 }

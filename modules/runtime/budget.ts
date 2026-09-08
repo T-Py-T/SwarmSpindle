@@ -29,9 +29,13 @@ export class BudgetAdmission {
   failure(swarmId: string): RuntimeError | undefined {
     const reason: unknown = this.circuits.get(swarmId)?.signal.reason;
     if (reason instanceof RuntimeError) return reason;
-    if (this.store.budget(swarmId).uncertainMicros > 0) {
+    const run = this.store.getSwarm(swarmId);
+    if (run.budget.uncertainMicros > 0) {
       this.trip(swarmId);
       return this.failure(swarmId);
+    }
+    if (run.spec.workingTargetMicros !== undefined && run.budget.settledMicros >= run.spec.workingTargetMicros) {
+      return new RuntimeError('working_target_reached', 'Shared verified usage reached the working target. No further model requests will start; existing requests may finish within the separate hard ceiling.');
     }
     return undefined;
   }

@@ -109,15 +109,17 @@ Multiple workers must share the same database to share a queue. Each worker rece
 The CLI expects a Markdown prompt containing `Final output: relative/path.ext` before a `## Definition of Done` heading. Everything after that heading is the done criteria. All three fields must be nonempty.
 
 ```sh
-bun run swarm 3 opus48 10 ./task.md
+bun run swarm 2 opus48 6 ./task.md --working-target 0.25
 ```
 
 This queues a real model task. A running worker begins it automatically. Without a worker, it stays queued. The budget is shared across the swarm and accepts positive dollars with at most two decimal places.
 
+The optional `--working-target USD` must be positive and no larger than the hard ceiling. It stops new model requests once shared verified spending reaches the target; requests already in flight can finish above it. Omit the flag for a task governed only by its hard ceiling. The dashboard starts with two agents, a $0.25 target and $6 ceiling. For Codex, use at least $16.26 of admission capacity.
+
 To provide selected local references:
 
 ```sh
-bun run swarm 3 gpt55 50 ./task.md --seed-dir ./seed-root
+bun run swarm 2 gpt55 17 ./task.md --seed-dir ./seed-root --working-target 0.25
 ```
 
 The seed directory is imported recursively before the swarm becomes visible to workers. Paths stay relative to that directory. If the prompt expects `reference/example.png`, place the file at `seed-root/reference/example.png`. Import accepts ordinary files and directories, rejects links and special files, and limits each file to 10 MiB and the import to 48 MiB, with at most 1,000 files and 4,096 directory entries.
@@ -198,6 +200,14 @@ Ports must be integers from 1024 through 65535. Keep the sandbox directory under
 Current spec defaults are 100 turns per agent, a one-hour run deadline, a 120-second idle timeout, and 16,000 requested output tokens. The spec accepts 1–100 agents. The CLI deliberately supports only the audited exact models and High reasoning.
 
 The current tariff reserves $5 plus $0.000025 per requested Opus output token, or $5.40 at the default. Codex reserves $16.26 per attempt because its transport does not transmit the requested output ceiling. Under an untouched $50 cap, at most nine default Opus reservations or three Codex reservations fit at once. Actual settlements can release the unused portion. Unknown usage cannot release liability. Prices are frozen in [runtime pricing](../modules/runtime/pricing.ts); changes require a new audit.
+
+## Budget-awareness experiment
+
+`bun tooling/budget-probe.ts plan opus48` prints the two-peer configuration without model requests. `launch opus48 NEW_DIRECTORY` starts it with a $0.25 target, $6 hard ceiling, 4,096 requested output tokens, eight turns per peer and two minutes of runtime. The equivalent `gpt55` probe has a $17 hard ceiling. Both require an online worker running the updated code.
+
+Each peer cites immutable `budget_observed` trace records in its board messages. The grader requires two distinct observations with changing verified balances per peer, correctly copied values and sensible actions, explicit successful finishes, and a canonical report. It reports whether the observed balances approached or reached the target separately from its general pass result. It cannot assess the quality of the agents' free-text reasoning.
+
+The runner writes a one-shot claim named `budget-probe-MODEL-v1.json` in `SWARM_DATA_DIR` before queueing. A later launch for that model refuses even with a different output directory. After interruption, inspect the claim and dashboard; do not delete it to retry automatically. `bun tooling/budget-probe.ts verify SWARM_ID NEW_DIRECTORY` saves a new assessment of an existing run without model calls. A claim with a missing run ID can mean interruption during queueing: inspect the dashboard for the named budget-awareness run before deciding on any further experiment.
 
 ## Verify changes and troubleshoot
 

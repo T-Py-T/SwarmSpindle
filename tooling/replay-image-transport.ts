@@ -28,7 +28,7 @@ function imageEvidence(messages: Message[]) {
   }));
 }
 
-// Matches the current runtime peer prompt plus Pi 0.84.1's custom-prompt cwd suffix.
+// Preserves the challenge-era runtime peer prompt plus Pi 0.84.1's custom-prompt cwd suffix.
 // Messages/images are persisted verbatim; the system prompt and tool definitions are reconstructed, not captured wire evidence.
 function reconstructedPrompt(run: SwarmRecord, agentId: string, cwd: string) {
   return `You are one of ${run.spec.agentCount} equal peer agents in Simple Swarm System. Your immutable ID is ${agentId}.
@@ -181,7 +181,7 @@ async function main() {
     requireCheck(requestReceipts[0]?.sha256 === requestReceipts[1]?.sha256, 'replay_request_payloads_differ');
     console.log(JSON.stringify({ passed: true, source: input.source, elapsedMs: Date.now() - started, realProviderCalls: 0, externalAttempts, localRequests,
       historicalLedgerTouched: false, messages: input.context.messages.length, messageSha256: hash(JSON.stringify(input.context.messages)), images, requestReceipts, reports,
-      limits: 'Proves local SDK serialization, zstd upload, image preservation and SSE handling only. System prompt/tools reconstructed from current source. Does not establish historical external failure causes or provider image acceptance.' }, null, 2));
+      limits: 'Proves local SDK serialization, zstd upload, image preservation and SSE handling only. System prompt/tools reconstructed from challenge-era source. Does not establish historical external failure causes or provider image acceptance.' }, null, 2));
   } finally { globalThis.fetch = nativeFetch; server.stop(true); }
 }
 

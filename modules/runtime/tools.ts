@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 import type { AgentStatus, FileChange } from '@simpleswarm/swarm';
 import type { ToolContext } from './contracts.ts';
 import { RuntimeError } from './pricing.ts';
+import { budgetAwareness } from './budget-awareness.ts';
 
 const pathSchema = Type.String({ minLength: 1, maxLength: 512 });
 const reasonSchema = Type.String({ minLength: 1, maxLength: 8000 });
@@ -18,6 +19,7 @@ export function createSwarmTools(context: ToolContext, complete: (result: AgentC
     if (run.status !== 'running' || !agent || !['running', 'waiting'].includes(agent.status)) {
       throw new RuntimeError('agent_inactive', 'This agent cannot execute another tool.');
     }
+    return run;
   };
   const write = (path: string, content: string, baseRevision: number, reason: string) => {
     active();
@@ -62,7 +64,12 @@ export function createSwarmTools(context: ToolContext, complete: (result: AgentC
     defineTool({ name: 'join_thread', label: 'Join thread', description: 'Join a shared discussion and receive its messages in your inbox.', parameters: Type.Object({ thread_id: Type.String() }), execute: async (_id, params) => { active(); return textResult(store.joinThread(actor, params.thread_id)); } }),
     defineTool({ name: 'list_team', label: 'Team', description: 'List peers, chosen names, states and findings.', parameters: Type.Object({}), execute: async () => { active(); return textResult(store.getSwarm(actor.swarmId).agents); } }),
     defineTool({ name: 'name', label: 'Choose name', description: 'Choose a short unique memorable agent name.', parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 80 }) }), execute: async (_id, params) => { active(); return textResult(store.renameAgent(actor, params.name)); } }),
-    defineTool({ name: 'budget', label: 'Budget', description: 'Inspect settled and reserved USD-equivalent usage. Reservations can temporarily limit active requests.', parameters: Type.Object({}), execute: async () => { active(); return textResult(store.budget(actor.swarmId)); } }),
+    defineTool({ name: 'budget', label: 'Budget', description: 'Check shared spending before choosing work, before expensive verification, and before reporting completion. Distinguish verified usage, temporary reservations, unresolved liability, the working target, and the hard cap. This snapshot does not reserve funds. Cite observationSeq when referring to the exact recorded balance.', parameters: Type.Object({}), execute: async () => {
+      const run = active();
+      const awareness = budgetAwareness(run, actor);
+      const observation = store.appendEvent(run.id, actor.agentId, 'budget_observed', { ...awareness });
+      return textResult({ ...awareness, observationSeq: observation.seq });
+    } }),
     defineTool({ name: 'claim_file', label: 'Claim files', description: 'Atomically claim exact file paths before any mutation, including shell output files. Claims expire; renew before long work. Coordinate ownership on the board.', parameters: Type.Object({ paths: Type.Array(pathSchema, { minItems: 1, maxItems: 100 }), reason: reasonSchema, ttl_ms: Type.Optional(Type.Integer({ minimum: 1000, maximum: 600000 })) }), execute: async (_id, params) => { active(); return textResult(store.claimFiles(actor, params.paths, params.reason, params.ttl_ms)); } }),
     defineTool({ name: 'release_file', label: 'Release files', description: 'Release your file claims to peers.', parameters: Type.Object({ paths: Type.Array(pathSchema, { minItems: 1 }) }), execute: async (_id, params) => { active(); store.releaseFiles(actor, params.paths); return textResult({ released: params.paths }); } }),
     defineTool({ name: 'file_history', label: 'File history', description: 'List canonical versions and authors for a file.', parameters: Type.Object({ path: pathSchema }), execute: async (_id, params) => { active(); return textResult(store.fileHistory(actor.swarmId, params.path)); } }),

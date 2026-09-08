@@ -11,6 +11,7 @@ export interface SwarmSpec {
   agentCount: number;
   model: ModelBinding;
   budgetMicros: number;
+  workingTargetMicros?: number;
   maxOutputTokens: number;
   maxTurnsPerAgent: number;
   maxRunMs: number;
