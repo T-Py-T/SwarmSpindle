@@ -18,6 +18,6 @@
 - [x] 3. Build the landing dashboard.
   - [x] 3.1 Render outcome filters, separate ledger totals and readable run cards.
   - [x] 3.2 Integrate search, refresh, detail outcomes and existing drilldown.
-- [ ] 4. Validate and deliver.
+- [x] 4. Validate and deliver.
   - [x] 4.1 Run model and Edge regressions, typecheck/build, inspect desktop/mobile screenshots.
-  - [ ] 4.2 Refresh README screenshots, preserve historical hashes and complete new-repository delivery.
+  - [x] 4.2 Refresh README screenshots, preserve historical hashes and complete new-repository delivery.

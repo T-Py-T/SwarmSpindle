@@ -2,7 +2,7 @@
 
 ## SwarmSpindle migration and overview — 2026-09-08
 
-New public destination: https://github.com/T-Py-T/SwarmSpindle. Independent interface and identity pass 212 tests/1,775 assertions and a clean-install smoke. Overall outcome dashboard is implemented with 17 model cases and all 20 browser cases passing across the initial scope and affected reruns. Publication and old-repository retirement are recorded in the delivery receipt. All three original run records remain unchanged; neither original challenge nor the live probe has been promoted to successful artifact acceptance. See [current delivery](validation/swarmspindle-delivery.md). Historical entries below retain their original names and evidence.
+New public destination: https://github.com/T-Py-T/SwarmSpindle. Independent interface and identity pass 212 tests/1,775 assertions and a clean-install smoke. Overall outcome dashboard is implemented with 17 model cases and all 20 browser cases passing across the initial scope and affected reruns. New public main is verified; old-repository deletion is pending GitHub user identity verification. See the delivery receipt. All three original run records remain unchanged; neither original challenge nor the live probe has been promoted to successful artifact acceptance. See [current delivery](validation/swarmspindle-delivery.md). Historical entries below retain their original names and evidence.
 
 ## Message search and cost follow-up — 2026-09-07
 

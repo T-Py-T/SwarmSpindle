@@ -36,3 +36,11 @@ Actual screenshots: `docs/images/overview.png`, `message-board.png`, and `messag
 - Compatibility retained: internal modules, environment variables, sandbox identifiers, storage path, one-shot probe claims, and all original run bodies.
 - Known limits: no independent acceptance store or universal verifier; terminal accounting may still settle; historical challenge and probe failures remain unchanged. Name screening is preliminary.
 - Delivery gate: tested source and screenshot blobs must match the new public main branch before deleting the old GitHub repository. No workflow files exist.
+
+## Public publication receipt
+
+Application commit `4ab021d11b5892013ac381eea62e7f1c591b7698` was published to the new public `T-Py-T/SwarmSpindle` main branch. GitHub's branch SHA and README, overview modules, and all three screenshot blob SHAs matched local Git. GitHub reported zero Actions runs. Existing Git history is preserved.
+
+Old-repository retirement remains pending **user identity verification**. The CLI token lacks delete_repo scope; the existing authenticated browser successfully reached the repository-specific deletion confirmation, then GitHub required a verification code or password. No identity check was bypassed and no broader token permissions were granted. The old public repository has not yet been deleted. Its Git mirror, metadata and three-run SQLite backup were revalidated before this attempt.
+
+Local web/worker run the new code. All three canonical run hashes remain equal to the pre-migration backup. Workspace/storage paths stay compatible; the primary Git remote points to SwarmSpindle.
