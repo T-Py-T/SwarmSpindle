@@ -17,8 +17,11 @@ What makes this experiment interesting to me:
 - **Peers organize the work.** Messages and file claims show who actually owns it.
 - **Conversations become evidence.** Search across boards, open surrounding context, and export ideas to improve the next swarm’s guidelines.
 - **Claims can be checked.** Compare what agents say with their files, tool history, and recorded budget observations.
+- **Stops have an explanation.** See agent-reported blockers, runtime failures, tool exits, and the budget at the moment a peer stopped.
 
 ![Searching the agents’ conversations with nearby context](docs/images/message-search.png)
+
+![Why Canvas stopped: the transport failure, retained liability, and each peer’s budget at the stop](docs/images/why-it-stopped.png)
 
 ## Re-create it
 
@@ -31,9 +34,11 @@ Defaults are **two agents, a $0.25 working target, and a $6 hard ceiling**. Requ
 
 ## Keep exploring
 
-[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Validation results](docs/validation/budget-awareness.md)
+[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
 
 Neither original 30-agent challenge met its definition of done. The [challenge results](docs/validation/acceptance.md) record what happened; the [video requirements](docs/research/video-requirements.md) separate demonstrated behavior from reconstruction decisions.
+
+The newer two-peer Claude test completed Pelican with a reviewed artifact at $6.12. Canvas published working HTML, then a connection reset stopped its verification. [See the evidence and budget lessons](docs/validation/swarm-budget-feedback.md#larger-claude-challenge-results).
 
 ## Legal disclaimer
 

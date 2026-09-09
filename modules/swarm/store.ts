@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { z } from 'zod';
-import { SwarmError, normalizeWorkspacePath, type Actor, type AgentRecord, type BoardMessage, type FileChange, type FileVersion, type Json, type MessageContext, type MessageSearchHit, type MessageSearchOptions, type MessageSearchPage, type Reservation, type RunStatus, type SwarmRecord, type SwarmSpec, type SwarmStore, type TokenUsage, type WorkspaceFile } from './contracts.ts';
+import { SwarmError, normalizeWorkspacePath, type Actor, type AgentRecord, type ArtifactAssessment, type BoardMessage, type FileChange, type FileVersion, type Json, type MessageContext, type MessageSearchHit, type MessageSearchOptions, type MessageSearchPage, type Reservation, type RunStatus, type SwarmRecord, type SwarmSpec, type SwarmStore, type TokenUsage, type WorkspaceFile } from './contracts.ts';
 import { parseSwarmSpec } from './spec.ts';
+import { assessmentMatches, createArtifactAssessment, readArtifactAssessment } from './assessment.ts';
 import { budgetOf, stateSchema, sumSafe, usageSchema, workerSchema, type State, type StoredReservation } from './state.ts';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -135,7 +136,10 @@ class SqliteSwarmStore implements SwarmStore {
     this.database = new Database(path, { create: true, strict: true });
     this.database.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;');
     this.database.exec('CREATE TABLE IF NOT EXISTS swarms (id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS reservation_owners (id TEXT PRIMARY KEY, swarm_id TEXT NOT NULL);');
-    try { this.initializeMessageSearch(); }
+    try {
+      this.database.exec('CREATE TABLE IF NOT EXISTS artifact_assessments (swarm_id TEXT PRIMARY KEY, body TEXT NOT NULL);');
+      this.initializeMessageSearch();
+    }
     catch (error) { this.database.close(); throw error; }
   }
   private initializeMessageSearch(): void {
@@ -212,7 +216,28 @@ class SqliteSwarmStore implements SwarmStore {
   listSwarms(): SwarmRecord[] {
     return this.database.query<{ id: string }, []>('SELECT id FROM swarms ORDER BY rowid DESC').all().map(row => this.getSwarm(row.id));
   }
-  getSwarm(id: string): SwarmRecord { return recordOf(this.load(id)); }
+  getSwarm(id: string): SwarmRecord {
+    return this.database.transaction(() => {
+      const state = this.load(id);
+      const run = recordOf(state);
+      const row = this.database.query<{ body: string }, [string]>('SELECT body FROM artifact_assessments WHERE swarm_id = ?').get(id);
+      if (!row) return run;
+      const assessment = readArtifactAssessment(row.body);
+      const file = latestFiles(state).find(file => file.path === state.spec.finalOutput && !file.deleted);
+      if (terminalRuns.has(state.status) && assessmentMatches(assessment, state.spec, file)) run.artifactAssessment = assessment;
+      return run;
+    }).deferred();
+  }
+  recordArtifactAssessment(id: string, input: unknown): ArtifactAssessment {
+    return this.database.transaction(() => {
+      const state = this.load(id);
+      requireValue(terminalRuns.has(state.status), 'run_not_terminal', 'Finish the run before recording an artifact assessment.');
+      const file = latestFiles(state).find(file => file.path === state.spec.finalOutput && !file.deleted);
+      const assessment = createArtifactAssessment(input, state.spec, file, this.now());
+      this.database.query('INSERT INTO artifact_assessments (swarm_id, body) VALUES (?, ?) ON CONFLICT(swarm_id) DO UPDATE SET body = excluded.body').run(id, JSON.stringify(assessment));
+      return assessment;
+    }).immediate();
+  }
   claimNextSwarm(workerId: string): SwarmRecord | null {
     return this.database.transaction(() => {
       const worker = this.worker(workerId);

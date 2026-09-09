@@ -28,6 +28,9 @@ describe('agent budget awareness', () => {
     expect(awareness.workingTargetMicros).toBeNull(); expect(awareness.targetRemainingMicros).toBeNull();
     expect(awareness.dollars.workingTarget).toBeNull(); expect(awareness.decision).toBe('ready');
     expect(awareness.requestsAdmissibleNow).toBe(7);
+    expect(awareness.hardCapacitySlots).toBe(7);
+    expect(awareness.phase).toBe('working');
+    expect(awareness.currentRequest).toBeNull();
     expect(awareness.units).toBe('USD-equivalent microdollars');
     expect(run).toEqual(before);
     expect(budgetAwareness(run, { ...actor, agentId: 'peer-1' }).ownSettledMicros).toBe(1_000_001);
@@ -63,10 +66,95 @@ describe('agent budget awareness', () => {
     const uncertain = fixture({ settledMicros: 10_000_000, uncertainMicros: 5_400_000 }, 10_000_000);
     const awareness = budgetAwareness(uncertain.run, uncertain.actor);
     expect(awareness.decision).toBe('unresolved_usage'); expect(awareness.targetRemainingMicros).toBe(0);
-    expect(awareness.requestsAdmissibleNow).toBe(6); // Numeric hard-ledger capacity does not override the circuit.
+    expect(awareness.hardCapacitySlots).toBe(6);
+    expect(awareness.requestsAdmissibleNow).toBe(0);
+    expect(awareness.phase).toBe('stop');
     expect(awareness.guidance).toContain('not confirmed spending');
     const reached = fixture({ capMicros: 10_000_000, settledMicros: 10_000_000 }, 10_000_000);
     expect(budgetAwareness(reached.run, reached.actor)).toMatchObject({ decision: 'working_target_reached', requestsAdmissibleNow: 0 });
+    const targetWithCapacity = fixture({ settledMicros: 10_000_000 }, 10_000_000);
+    expect(budgetAwareness(targetWithCapacity.run, targetWithCapacity.actor)).toMatchObject({ phase: 'stop', hardCapacitySlots: 7, requestsAdmissibleNow: 0 });
+  });
+
+  test('advises wrapping up at exactly 20 percent target remaining without treating the target as a request allowance', () => {
+    for (const [settledMicros, phase] of [[199_999, 'working'], [200_000, 'wrap_up'], [249_999, 'wrap_up'], [250_000, 'stop']] as const) {
+      const { run, actor } = fixture({ settledMicros }, 250_000);
+      const before = structuredClone(run);
+      const awareness = budgetAwareness(run, actor);
+      expect(awareness.phase).toBe(phase);
+      expect(awareness.requestsAdmissibleNow).toBe(phase === 'stop' ? 0 : 9);
+      expect(awareness.targetRemainingMicros).toBe(250_000 - settledMicros);
+      expect(run).toEqual(before);
+      if (phase === 'wrap_up') expect(awareness.guidance).toContain('Do not start side work');
+    }
+    const noTarget = fixture({ settledMicros: 250_000 });
+    expect(budgetAwareness(noTarget.run, noTarget.actor).phase).toBe('working');
+  });
+
+  test('distinguishes an admitted request from additional capacity and tells it to work instead of waiting on itself', () => {
+    const { run, actor } = fixture({ capMicros: 6_000_000, reservedMicros: 5_400_000 }, 250_000);
+    const before = structuredClone(run);
+    const awareness = budgetAwareness(run, actor, { reservedMicros: 5_400_000, turn: 1 });
+    expect(awareness).toMatchObject({ phase: 'working', decision: 'waiting_for_reservations', availableMicros: 600_000, hardCapacitySlots: 0, requestsAdmissibleNow: 0,
+      currentRequest: { admitted: true, reservedMicros: 5_400_000, turn: 1, maxTurns: 100, remainingTurnsAfterCurrent: 99 } });
+    expect(awareness.guidance).toContain('Do not idle on your own hold');
+    expect(awareness.guidance).toContain('use the current request productively');
+    expect(run).toEqual(before);
+    expect(() => budgetAwareness(run, actor, { reservedMicros: 5_399_999, turn: 1 })).toThrow('admitted reservation');
+    expect(() => budgetAwareness(run, actor, { reservedMicros: 5_400_000, turn: 101 })).toThrow('valid model turn');
+    expect(() => budgetAwareness(run, actor, { reservedMicros: 5_400_000, turn: 0 })).toThrow('valid model turn');
+    const noHold = fixture();
+    expect(() => budgetAwareness(noHold.run, noHold.actor, { reservedMicros: 5_400_000, turn: 1 })).toThrow('admitted reservation');
+  });
+
+  test('prioritizes explicit completion before the turn limit while preserving budget stop precedence', () => {
+    const { run, actor } = fixture({ reservedMicros: 5_400_000 });
+    for (const [turn, phase] of [[98, 'working'], [99, 'wrap_up'], [100, 'wrap_up']] as const) {
+      const awareness = budgetAwareness(run, actor, { reservedMicros: 5_400_000, turn });
+      expect(awareness.phase).toBe(phase);
+      expect(awareness.currentRequest?.remainingTurnsAfterCurrent).toBe(100 - turn);
+      if (phase === 'wrap_up') expect(awareness.guidance).toContain('explicit done or honest handoff');
+    }
+    const uncertain = fixture({ settledMicros: 210_000, reservedMicros: 5_400_000, uncertainMicros: 5_400_000 }, 250_000);
+    const stopped = budgetAwareness(uncertain.run, uncertain.actor, { reservedMicros: 5_400_000, turn: 100 });
+    expect(stopped).toMatchObject({ phase: 'stop', decision: 'unresolved_usage', requestsAdmissibleNow: 0 });
+    expect(stopped.guidance).toContain('already-authorized tool actions');
+    expect(stopped.guidance).toContain('otherwise bail honestly');
+  });
+
+  test('wraps up at the reservation headroom boundary even without a working target', () => {
+    for (const [settledMicros, headroom, phase, decision] of [
+      [479_999, 120_001, 'working', 'ready'], [480_000, 120_000, 'wrap_up', 'ready'],
+      [599_999, 1, 'wrap_up', 'ready'], [600_000, 0, 'wrap_up', 'ready'], [600_001, 0, 'stop', 'hard_ceiling_reached'],
+    ] as const) {
+      const { run, actor } = fixture({ capMicros: 6_000_000, settledMicros });
+      const before = structuredClone(run);
+      const awareness = budgetAwareness(run, actor);
+      expect(awareness).toMatchObject({ phase, decision, nextReservationHeadroomMicros: headroom, workingTargetMicros: null });
+      expect(run).toEqual(before);
+    }
+  });
+
+  test('warns at the actual canvas pre-final balance without mistaking its current reservation for spending', () => {
+    const { run, actor } = fixture({ capMicros: 6_000_000, settledMicros: 728_520, reservedMicros: 5_102_400 }, 1_000_000);
+    run.spec.maxOutputTokens = 4096;
+    const before = structuredClone(run);
+    const awareness = budgetAwareness(run, actor, { reservedMicros: 5_102_400, turn: 6 });
+    expect(awareness).toMatchObject({ phase: 'wrap_up', decision: 'waiting_for_reservations', nextReservationHeadroomMicros: 169_080,
+      availableMicros: 169_080, targetRemainingMicros: 271_480, dollars: { nextReservationHeadroom: '0.169080' } });
+    expect(awareness.guidance).toContain('20% of the initial next-reservation headroom');
+    expect(awareness.guidance).toContain('Preserve the canonical draft');
+    expect(awareness.guidance).toContain('Do not idle on your own hold');
+    expect(awareness.guidance).toContain('not a spending allowance');
+    expect(run).toEqual(before);
+    const afterRelease = structuredClone(run);
+    afterRelease.budget.reservedMicros = 0;
+    afterRelease.budget.availableMicros += 5_102_400;
+    expect(budgetAwareness(afterRelease, actor)).toMatchObject({ phase: 'wrap_up', decision: 'ready', nextReservationHeadroomMicros: 169_080 });
+    const unresolved = structuredClone(run);
+    unresolved.budget.uncertainMicros = 10_000;
+    unresolved.budget.availableMicros -= 10_000;
+    expect(budgetAwareness(unresolved, actor, { reservedMicros: 5_102_400, turn: 6 })).toMatchObject({ phase: 'stop', decision: 'unresolved_usage', nextReservationHeadroomMicros: 159_080, requestsAdmissibleNow: 0 });
   });
 
   test('uses each exact model reservation without predicting future request counts', () => {

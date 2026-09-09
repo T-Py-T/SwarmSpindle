@@ -1,3 +1,4 @@
 export * from './contracts.ts';
 export { parseSwarmSpec } from './spec.ts';
 export { openSwarmStore, type StoreOptions } from './store.ts';
+export { diagnoseSwarm, type SwarmDiagnostics } from './diagnostics.ts';

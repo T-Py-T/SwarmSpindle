@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { openSwarmStore, parseSwarmSpec, type Actor, type SwarmStore, type TraceEvent } from '@simpleswarm/swarm';
 import { budgetAwareness, type BudgetAwareness } from '../modules/runtime/budget-awareness.ts';
 import { assessBudgetProbe, queueBudgetProbe } from '../tooling/budget-probe.ts';
+import { requireGuidanceEvidence } from '../tooling/swarm-retest.ts';
 
 const stores: SwarmStore[] = [];
 const roots: string[] = [];
@@ -42,6 +43,7 @@ function fixture(target: number | null = 250_000) {
     const snapshot = observation.snapshot;
     const claim = {
       kind: 'budget_checkpoint', observationSeq: observation.event.seq, decision: snapshot.decision,
+      capMicros: snapshot.capMicros, availableMicros: snapshot.availableMicros,
       settledMicros: snapshot.settledMicros, reservedMicros: snapshot.reservedMicros, uncertainMicros: snapshot.uncertainMicros,
       workingTargetMicros: snapshot.workingTargetMicros, targetRemainingMicros: snapshot.targetRemainingMicros,
       nextRequestCeilingMicros: snapshot.nextRequestCeilingMicros,
@@ -70,6 +72,17 @@ function fixture(target: number | null = 250_000) {
 }
 
 describe('budget probe evidence grading', () => {
+  test('larger-run prerequisite rejects incomplete evidence and requires both verified Claude peers', () => {
+    const f = fixture();
+    expect(() => requireGuidanceEvidence(f.store, f.run.id)).toThrow('require a completed Claude budget probe');
+    f.settle(f.first, 50_000); f.round(); f.settle(f.second, 50_000); f.round(); f.finish();
+    expect(f.assess().passed).toBe(true);
+    expect(() => requireGuidanceEvidence(f.store, f.run.id)).toThrow('verified model responses');
+    for (const actor of f.actors) f.store.appendEvent(f.run.id, actor.agentId, 'model_response', {
+      provider: 'anthropic', responseModel: 'claude-opus-4-8', requestedModel: 'claude-opus-4-8', thinking: 'high',
+    });
+    expect(requireGuidanceEvidence(f.store, f.run.id).passed).toBe(true);
+  });
   test('accepts two completed peers citing two distinct accurate balances each', () => {
     const f = fixture(); f.settle(f.first, 50_000); f.round(); f.settle(f.second, 50_000); f.round(); f.finish();
     const events = f.store.events(f.run.id); const ledger = f.store.reservations(f.run.id);
@@ -81,7 +94,7 @@ describe('budget probe evidence grading', () => {
     expect(f.store.events(f.run.id)).toEqual(events); expect(f.store.reservations(f.run.id)).toEqual(ledger);
   });
 
-  for (const field of ['decision', 'settledMicros', 'reservedMicros', 'uncertainMicros', 'workingTargetMicros', 'targetRemainingMicros', 'nextRequestCeilingMicros'] as const) {
+  for (const field of ['decision', 'capMicros', 'availableMicros', 'settledMicros', 'reservedMicros', 'uncertainMicros', 'workingTargetMicros', 'targetRemainingMicros', 'nextRequestCeilingMicros'] as const) {
     test(`rejects a checkpoint with incorrect ${field} despite otherwise sufficient evidence`, () => {
       const f = fixture(); f.settle(f.first, 50_000); f.round(); f.settle(f.second, 50_000);
       const observation = f.observe(f.first); const original = observation.snapshot[field];

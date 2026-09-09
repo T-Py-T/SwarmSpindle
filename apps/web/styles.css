@@ -325,6 +325,67 @@ mark { border-radius: 2px; background: #d7edfb; color: #174b79; }
 .overview-run-times { display: flex; flex-wrap: wrap; gap: 7px 15px; margin: 0; }
 .overview-run-times dt { color: #7b8d9f; font-size: 9px; }
 .overview-run-times dd { margin: 2px 0 0; color: #546c83; font-size: 10px; }
+.artifact-review { min-width: 0; padding: 13px; border: 1px solid #dce5ee; border-radius: 8px; background: #f9fbfd; }
+.artifact-review .artifact-review-verdict { padding: 3px 7px; border-radius: 5px; font-size: 10px; font-weight: 650; }
+.artifact-review .artifact-review-passed { color: #176e62; background: #e5f4ef; }
+.artifact-review .artifact-review-failed { color: #a13c4f; background: #fcebef; }
+.artifact-review .artifact-review-not_reviewed { color: #697b8f; background: #eaf0f6; }
+.artifact-review-explanation { margin: 8px 0 0; color: #5c7187; font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.artifact-review-failures { margin: 9px 0 0; color: #994154; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.artifact-review-details { margin-top: 11px; padding-top: 10px; border: 0; border-top: 1px solid #e0e8f0; border-radius: 0; background: transparent; }
+.artifact-review-details > summary { padding: 0; color: #375d82; font-size: 11px; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.artifact-review-checks { display: grid; gap: 12px; margin: 14px 0; padding: 0; list-style: none; }
+.artifact-review-checks li { min-width: 0; }
+.artifact-review-checks li > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 11px; overflow-wrap: anywhere; }
+.artifact-check-result { flex-shrink: 0; font-size: 10px; font-weight: 650; }
+.artifact-check-passed .artifact-check-result { color: #176e62; }
+.artifact-check-failed .artifact-check-result { color: #a13c4f; }
+.artifact-review-checks p { margin: 5px 0 0; color: #5c7187; font-size: 11px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.artifact-review-identity { display: grid; gap: 8px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #e0e8f0; }
+.artifact-review-identity > div { min-width: 0; }
+.artifact-review-identity dt { color: #7b8d9f; font-size: 9px; }
+.artifact-review-identity dd { margin: 2px 0 0; color: #546c83; font-size: 10px; }
+.artifact-review-identity code { font-size: 10px; overflow-wrap: anywhere; }
+.summary-actions .insights-action { border-color: #adc8e7; background: #eaf3ff; color: #245d9f; }
+.diagnostics-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 10px 16px; margin: 8px 0 16px; font-size: 11px; }
+.diagnostics-toolbar > span { margin-right: auto; color: var(--muted); }
+.diagnostics-toolbar button { font-size: 10px; }
+.diagnostics-intro { margin: 0 0 16px; color: #536b82; font-size: 12px; line-height: 1.7; }
+.diagnostics-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.diagnostics-metrics > div { min-width: 0; padding: 12px; border: 1px solid #e0e8f1; border-radius: 7px; background: #f6f9fc; }
+.diagnostics-metrics dt { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.diagnostics-metrics dd { margin: 5px 0 0; color: #315c87; font-size: 23px; font-weight: 650; overflow-wrap: anywhere; }
+.diagnostics-note { margin: 10px 0; color: var(--muted); font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.diagnostics-current-budget { padding: 12px; margin: 14px 0 20px; border: 1px solid #dce7f1; border-radius: 8px; background: #f7fafd; }
+.diagnostics-current-budget > summary { color: #3a6286; font-size: 11px; font-weight: 600; cursor: pointer; }
+.diagnostics-balances { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 10px 0 0; }
+.diagnostics-balances > div { min-width: 0; }
+.diagnostics-balances dt { color: var(--muted); font-size: 10px; }
+.diagnostics-balances dd { margin: 3px 0 0; color: #3e5c77; font-size: 11px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.diagnostics-peers { display: grid; gap: 14px; }
+.diagnostics-peer { min-width: 0; padding: 18px; border: 1px solid #dce5ee; border-radius: 9px; }
+.diagnostics-peer-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.diagnostics-peer h3 { margin: 0; color: #2f5274; font-size: 14px; overflow-wrap: anywhere; }
+.diagnostics-peer h4 { margin: 0 0 6px; font-size: 11px; font-weight: 650; }
+.diagnostics-origin { margin: 8px 0; color: #5b7189; font-size: 11px; overflow-wrap: anywhere; }
+.diagnostics-origin strong { color: #355e86; }
+.diagnostics-reason { padding: 10px 12px; margin: 10px 0; border-left: 2px solid #9fbad9; background: #f5f8fc; color: #405d78; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diagnostics-stop-fields { display: flex; flex-wrap: wrap; gap: 5px 16px; color: var(--muted); font-size: 10px; }
+.diagnostics-stop-fields code { overflow-wrap: anywhere; }
+.diagnostics-stop-budget { margin-top: 15px; padding-top: 13px; border-top: 1px solid #e5ecf3; }
+.diagnostics-last-tool { margin-top: 16px; }
+.diagnostics-last-tool p { margin: 5px 0 0; color: #5b7189; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.diagnostics-tool-summary { white-space: pre-wrap; }
+.diagnostics-issues h3 { margin: 22px 0 10px; font-size: 12px; }
+.diagnostics-issues ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.diagnostics-issues li { padding: 12px; border-radius: 7px; background: #faf5ec; color: #745d39; font-size: 11px; overflow-wrap: anywhere; }
+.diagnostics-issues p { margin: 5px 0 0; line-height: 1.7; white-space: pre-wrap; }
+@media (max-width: 760px) {
+  .diagnostics-metrics, .diagnostics-balances { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diagnostics-peer { padding: 13px; }
+  .diagnostics-toolbar { align-items: flex-start; }
+  .diagnostics-toolbar > span { flex-basis: 100%; }
+}
 @media (max-width: 1180px) {
   .rows:has(> .overview-run) { grid-template-columns: minmax(0, 1fr); }
 }

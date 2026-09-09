@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import type { BoardMessage, SwarmStore, ThreadRecord } from '@simpleswarm/swarm';
-import { parseSwarmSpec, SwarmError, normalizeWorkspacePath } from '@simpleswarm/swarm';
+import type { BoardMessage, SwarmRecord, SwarmStore, ThreadRecord, TraceEvent } from '@simpleswarm/swarm';
+import { diagnoseSwarm, parseSwarmSpec, SwarmError, normalizeWorkspacePath } from '@simpleswarm/swarm';
 
 export interface WebOptions { store: SwarmStore; port: number; previewPort: number; html: string; script: string; styles: string }
 const terminalStatuses = new Set(['completed', 'bailed', 'failed', 'cancelled', 'budget_exhausted', 'interrupted']);
@@ -78,6 +78,7 @@ export function createWebServers(options: WebOptions) {
         }
         if (action === 'events') return eventStream(request, store, id, url.searchParams.get('after'), controlResponse);
         if (action === 'trace') return json(store.events(id, integerQuery(url.searchParams.get('after'), 0), 1000));
+        if (action === 'diagnostics') return json(readRunDiagnostics(store, run));
         if (action === 'messages') return json(store.messages(id, url.searchParams.get('thread') ?? '', integerQuery(url.searchParams.get('after'), 0)));
         if (action === 'message-context') return json(store.messageContext(id, integerQuery(url.searchParams.get('message'), 0)));
         if (action === 'message-page') return json(messagePage(store.messages(id, url.searchParams.get('thread') ?? '', integerQuery(url.searchParams.get('after'), 0))));
@@ -120,6 +121,22 @@ export function createWebServers(options: WebOptions) {
   try { control = Bun.serve({ hostname: '127.0.0.1', port, fetch: fetchControl, idleTimeout: 30 }); }
   catch (error) { preview.stop(true); throw error; }
   return { control, preview, origin, previewOrigin, stop() { control.stop(true); preview.stop(true); } };
+}
+
+function readRunDiagnostics(store: SwarmStore, run: SwarmRecord) {
+  const events: TraceEvent[] = [];
+  const relevant = new Set(['swarm_created', 'budget_reserved', 'budget_settled', 'budget_uncertain', 'budget_observed', 'model_response',
+    'tool_start', 'tool_execution_start', 'tool_execution_end', 'agent_stop', 'agent_ended', 'request_failed', 'tool_result']);
+  let bytes = 0;
+  // The current store decodes the whole run per read; do not repeat that work for each page.
+  const page = store.events(run.id, 0, 10_000);
+  for (const event of page) {
+    const compact = relevant.has(event.kind) ? event : { ...event, payload: null };
+    bytes += Buffer.byteLength(JSON.stringify(compact));
+    if (bytes > 16 * 1024 * 1024) return diagnoseSwarm(run, events, { truncated: true });
+    events.push(compact);
+  }
+  return diagnoseSwarm(run, events, { truncated: page.length === 10_000 });
 }
 
 interface IndexedThread {

@@ -39,9 +39,9 @@ async function eventually(predicate: () => boolean): Promise<void> {
   }
 }
 
-function fixture(options: { agentCount?: number; budgetMicros?: number; workingTargetMicros?: number } = {}) {
+function fixture(options: { agentCount?: number; budgetMicros?: number; workingTargetMicros?: number; maxTurnsPerAgent?: number } = {}) {
   const store = openSwarmStore(':memory:'); stores.push(store); store.registerWorker('working-target-fixture', process.pid);
-  store.createSwarm(parseSwarmSpec({ task: 'Synthetic working target fixture', definitionOfDone: 'Only an explicit done establishes completion', finalOutput: 'fixture.txt', agentCount: options.agentCount ?? 2, budgetMicros: options.budgetMicros ?? 50_000_000, workingTargetMicros: options.workingTargetMicros, maxOutputTokens: 16000, maxRunMs: 10000, idleTimeoutMs: 3000, model }), [{ path: 'fixture.txt', baseRevision: 0, contentBase64: Buffer.from('Synthetic existing output is not a completion claim.').toString('base64') }]);
+  store.createSwarm(parseSwarmSpec({ task: 'Synthetic working target fixture', definitionOfDone: 'Only an explicit done establishes completion', finalOutput: 'fixture.txt', agentCount: options.agentCount ?? 2, budgetMicros: options.budgetMicros ?? 50_000_000, workingTargetMicros: options.workingTargetMicros, maxTurnsPerAgent: options.maxTurnsPerAgent ?? 100, maxOutputTokens: 16000, maxRunMs: 10000, idleTimeoutMs: 3000, model }), [{ path: 'fixture.txt', baseRevision: 0, contentBase64: Buffer.from('Synthetic existing output is not a completion claim.').toString('base64') }]);
   const run = store.claimNextSwarm('working-target-fixture'); if (!run) throw new Error('Missing working target run');
   const actors = run.agents.map(agent => ({ swarmId: run.id, agentId: agent.id }));
   const actor = actors[0]; if (!actor) throw new Error('Missing working target agent');
@@ -55,11 +55,11 @@ async function runtimeFixture(options: Parameters<typeof fixture>[0] = {}) {
   await credentials.modify('anthropic', async () => ({ type: 'api_key', key: 'synthetic-working-target-credential' }));
   const createModels = () => ModelRuntime.create({ credentials, modelsPath: null, modelsStorePath: join(path, 'models-cache.json'), allowModelNetwork: false, signal: AbortSignal.timeout(3000) });
   const sandbox: Sandbox = { check: async () => ({ ready: true, reason: 'Synthetic working target fixture', image: 'fixture' }), execute: async () => { throw new Error('Shell execution forbidden'); }, stop: async () => {} };
-  return { ...current, createRuntime: (send: typeof fetch) => createPiRuntime({ store: current.store, sandbox, sessionDirectory: path }, { createModels, fetch: send }) };
+  return { ...current, createRuntime: (send: typeof fetch, sandboxOverride?: Sandbox) => createPiRuntime({ store: current.store, sandbox: sandboxOverride ?? sandbox, sessionDirectory: path }, { createModels, fetch: send }) };
 }
 
-function toolResponse(ordinal: number, name: 'budget' | 'list_team' | 'done') {
-  const argumentsJson = name === 'done' ? JSON.stringify({ done_reasoning: 'Explicit synthetic completion after budget observations.', output: 'fixture.txt' }) : '{}';
+function toolResponse(ordinal: number, name: 'budget' | 'list_team' | 'done' | 'bash' | 'claim_file', argumentsOverride?: Record<string, unknown>) {
+  const argumentsJson = JSON.stringify(argumentsOverride ?? (name === 'done' ? { done_reasoning: 'Explicit synthetic completion after budget observations.', output: 'fixture.txt' } : {}));
   const events = [
     { type: 'message_start', message: { id: `target-message-${ordinal}`, type: 'message', role: 'assistant', model: model.id, content: [], usage: { input_tokens: usage.input, output_tokens: 0 } } },
     { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: `target-tool-${ordinal}`, name, input: {} } },
@@ -111,6 +111,160 @@ function latestBudgetToolResult(payload: Record<string, unknown>): Record<string
   if (!result) throw new Error('Missing the preceding budget tool result');
   return result;
 }
+
+for (const scenario of ['http', 'sse', 'transport', 'incomplete'] as const) {
+  test(`real Pi emits one sanitized request failure and a runtime stop for ${scenario}`, async () => {
+    const current = await runtimeFixture({ agentCount: 1 });
+    const secret = 'PRIVATE-PROVIDER-DIAGNOSTIC-FIXTURE';
+    let calls = 0;
+    const runtime = current.createRuntime(intercepted(async () => {
+      calls++;
+      if (scenario === 'http') return new Response(JSON.stringify({ error: { message: secret } }), { status: 429, headers: { 'x-private': secret } });
+      if (scenario === 'sse') return new Response(`event: error\ndata: ${JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: secret } })}\n\n`, { headers: { 'content-type': 'text/event-stream' } });
+      if (scenario === 'transport') throw Object.assign(new Error(secret), { code: 'ECONNRESET', headers: { authorization: secret } });
+      return new Response('', { headers: { 'content-type': 'text/event-stream' } });
+    }));
+    try {
+      await runtime.run(current.run, signal());
+      const state = current.store.getSwarm(current.run.id);
+      const events = current.store.events(state.id);
+      const failures = events.filter(event => event.kind === 'request_failed');
+      const stops = events.filter(event => event.kind === 'agent_stop');
+      expect(calls).toBe(1); expect(failures).toHaveLength(1); expect(stops).toHaveLength(1);
+      const failure = record(failures[0]?.payload);
+      const stop = record(stops[0]?.payload);
+      const expectedCode = { http: 'provider_http_error', sse: 'provider_sse_error', transport: 'provider_transport_error', incomplete: 'response_incomplete' }[scenario];
+      expect(failure).toMatchObject({ code: expectedCode, provider: 'anthropic', model: model.id, turn: 1,
+        reservationId: current.store.reservations(state.id)[0]?.id, budget: { reservedMicros: 0, uncertainMicros: 5_400_000 } });
+      expect(typeof failure.elapsedMs).toBe('number');
+      expect(Number(failure.elapsedMs)).toBeGreaterThanOrEqual(0);
+      if (scenario === 'http') expect(failure.httpStatus).toBe(429);
+      if (scenario === 'sse') expect(failure.providerErrorType).toBe('rate_limit_error');
+      if (scenario === 'transport') expect(failure).toMatchObject({ transportCode: 'ECONNRESET', phase: 'fetch_before_response' });
+      expect(stop).toMatchObject({ origin: 'runtime', code: expectedCode, status: 'failed', turn: 1, reason: state.agents[0]?.reason, budget: { uncertainMicros: 5_400_000 } });
+      const ended = events.find(event => event.kind === 'agent_ended');
+      expect(ended).toBeDefined();
+      expect(stops[0]!.seq).toBeLessThan(ended!.seq);
+      expect(JSON.stringify({ failures, stops })).not.toContain(secret);
+      expect(state.status).toBe('failed');
+      expect(state.budget).toMatchObject({ settledMicros: 0, reservedMicros: 0, uncertainMicros: 5_400_000 });
+    } finally { await runtime.dispose(); }
+  }, 15000);
+}
+
+test('real Pi records runtime turn exhaustion without inventing a second reservation', async () => {
+  const current = await runtimeFixture({ agentCount: 1, maxTurnsPerAgent: 1 });
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async () => toolResponse(++calls, 'list_team')));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    const events = current.store.events(state.id);
+    const failures = events.filter(event => event.kind === 'request_failed');
+    expect(calls).toBe(1); expect(failures).toHaveLength(1);
+    expect(record(failures[0]?.payload)).toMatchObject({ code: 'turn_limit', turn: 2, budget: { settledMicros: 850, reservedMicros: 0, uncertainMicros: 0 } });
+    expect(record(failures[0]?.payload).reservationId).toBeUndefined();
+    expect(events.filter(event => event.kind === 'agent_stop').map(event => event.payload)).toEqual([
+      expect.objectContaining({ origin: 'runtime', code: 'turn_limit', status: 'stalled', turn: 2 }),
+    ]);
+    expect(current.store.reservations(state.id)).toHaveLength(1);
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('a failed diagnostic write cannot interrupt real Pi error termination or release uncertain liability', async () => {
+  const current = await runtimeFixture({ agentCount: 1 });
+  const appendEvent = current.store.appendEvent.bind(current.store);
+  let diagnosticAttempts = 0;
+  current.store.appendEvent = (swarmId, agentId, kind, payload) => {
+    if (kind === 'request_failed') { diagnosticAttempts++; throw new Error('Synthetic diagnostic persistence unavailable'); }
+    return appendEvent(swarmId, agentId, kind, payload);
+  };
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async () => { calls++; return new Response('Unlogged provider body', { status: 500 }); }));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    expect(calls).toBe(1); expect(diagnosticAttempts).toBe(1);
+    expect(state.status).toBe('failed');
+    expect(state.budget).toMatchObject({ settledMicros: 0, reservedMicros: 0, uncertainMicros: 5_400_000 });
+    expect(current.store.events(state.id).filter(event => event.kind === 'agent_stop')).toHaveLength(1);
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('a target rejection before incrementing model turns records the stopped attempt in both diagnostics', async () => {
+  const current = await runtimeFixture({ agentCount: 1, workingTargetMicros: 850 });
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async () => toolResponse(++calls, 'list_team')));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    const events = current.store.events(state.id);
+    expect(calls).toBe(1);
+    expect(state.status).toBe('bailed');
+    expect(events.filter(event => event.kind === 'model_response').map(event => record(event.payload).turn)).toEqual([1]);
+    const failures = events.filter(event => event.kind === 'request_failed');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.payload).toMatchObject({ code: 'working_target_reached', turn: 2 });
+    expect(record(failures[0]?.payload).reservationId).toBeUndefined();
+    const stops = events.filter(event => event.kind === 'agent_stop');
+    expect(stops).toHaveLength(1);
+    expect(stops[0]?.payload).toMatchObject({ origin: 'runtime', code: 'working_target_reached', status: 'bailed', turn: 2 });
+    expect(current.store.reservations(state.id)).toHaveLength(1);
+    expect(state.budget).toMatchObject({ settledMicros: 850, reservedMicros: 0, uncertainMicros: 0 });
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('real Pi records a shell nonzero exit and published count even when SDK tool execution succeeds', async () => {
+  const current = await runtimeFixture({ agentCount: 1 });
+  const privateOutput = 'PRIVATE-SHELL-OUTPUT-FIXTURE';
+  let calls = 0; let shellCalls = 0;
+  const sandbox: Sandbox = {
+    check: async () => ({ ready: true, reason: 'Synthetic tool-result diagnostic fixture', image: 'fixture' }), stop: async () => {},
+    execute: async () => { shellCalls++; return { exitCode: 7, durationMs: 42, stdout: privateOutput, stderr: privateOutput,
+      changes: [{ path: 'evidence.txt', baseRevision: 0, contentBase64: Buffer.from('Retained partial evidence').toString('base64') }] }; },
+  };
+  const runtime = current.createRuntime(intercepted(async () => {
+    const ordinal = ++calls;
+    if (ordinal === 1) return toolResponse(ordinal, 'claim_file', { paths: ['evidence.txt'], reason: 'Retain partial evidence' });
+    if (ordinal === 2) return toolResponse(ordinal, 'bash', { command: 'synthetic command; never executed' });
+    if (ordinal === 3) return toolResponse(ordinal, 'done');
+    throw new Error('Explicit completion did not stop the fixture');
+  }), sandbox);
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    const events = current.store.events(state.id);
+    const results = events.filter(event => event.kind === 'tool_result');
+    expect(calls).toBe(3); expect(shellCalls).toBe(1); expect(results).toHaveLength(1);
+    expect(results[0]?.payload).toEqual({ toolCallId: 'target-tool-2', toolName: 'bash', exitCode: 7, durationMs: 42, publishedFiles: 1, code: 'command_failed' });
+    const sdkResult = events.find(event => event.kind === 'tool_execution_end' && record(event.payload).toolCallId === 'target-tool-2');
+    expect(record(sdkResult?.payload).isError).toBe(false);
+    expect(JSON.stringify(results)).not.toContain(privateOutput);
+    expect(current.store.readFile(state.id, 'evidence.txt').revision).toBe(1);
+    const stops = events.filter(event => event.kind === 'agent_stop');
+    expect(stops).toHaveLength(1);
+    expect(stops[0]?.payload).toMatchObject({ origin: 'agent', code: 'done', status: 'done', turn: 3, reason: state.agents[0]?.reason, budget: { settledMicros: 2550 } });
+    expect(stops[0]!.seq).toBeLessThan(events.find(event => event.kind === 'agent_ended')!.seq);
+    expect(events.filter(event => event.kind === 'request_failed')).toHaveLength(0);
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('real Pi distinguishes an explicit agent bailout from runtime failure', async () => {
+  const current = await runtimeFixture({ agentCount: 1 });
+  const reason = 'Essential artifact criteria remain unmet; handing off honestly.';
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async () => toolResponse(++calls, 'done', { done_reasoning: reason, bail: true })));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    const events = current.store.events(state.id);
+    expect(calls).toBe(1); expect(state.status).toBe('bailed');
+    expect(events.filter(event => event.kind === 'request_failed')).toHaveLength(0);
+    expect(events.filter(event => event.kind === 'agent_stop').map(event => event.payload)).toEqual([
+      expect.objectContaining({ origin: 'agent', code: 'bailed', status: 'bailed', reason, turn: 1 }),
+    ]);
+  } finally { await runtime.dispose(); }
+}, 15000);
 
 describe('working target admission without relaxing the hard ceiling', () => {
   test('early admission reserves capacity without validating or dispatching a payload', async () => {
@@ -213,6 +367,9 @@ test('a real Pi peer waiting for hard-cap capacity receives its predecessor sett
     expect(note.settledMicros).toBe((ordinal - 1) * 850);
     expect(note.reservedMicros).toBe(5_400_000);
     expect(note.availableMicros).toBe(600_000 - (ordinal - 1) * 850);
+    expect(note).toMatchObject({ phase: 'working', decision: 'waiting_for_reservations', hardCapacitySlots: 0, requestsAdmissibleNow: 0,
+      currentRequest: { admitted: true, reservedMicros: 5_400_000, turn: 1, maxTurns: current.run.spec.maxTurnsPerAgent, remainingTurnsAfterCurrent: current.run.spec.maxTurnsPerAgent - 1 } });
+    expect(note.guidance).toContain('Do not idle on your own hold');
     if (ordinal === 1) {
       await eventually(() => current.store.getSwarm(current.run.id).agents.some(agent => agent.status === 'waiting'));
       expect(calls).toBe(1);
@@ -230,6 +387,58 @@ test('a real Pi peer waiting for hard-cap capacity receives its predecessor sett
     expect(state.agents.map(agent => agent.status)).toEqual(['done', 'done']);
     expect(state.budget).toMatchObject({ settledMicros: 1700, reservedMicros: 0, uncertainMicros: 0, availableMicros: 5_998_300 });
     expect(current.store.reservations(state.id).map(reservation => reservation.status)).toEqual(['settled', 'settled']);
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('real Pi receives canonical persistence instructions and wraps up before the reservation floor blocks continuation', async () => {
+  const current = await runtimeFixture({ agentCount: 1, budgetMicros: 5_402_000, workingTargetMicros: 100_000 });
+  const notes: Record<string, unknown>[] = [];
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async (input, init) => {
+    const ordinal = ++calls;
+    if (ordinal > 3) throw new Error('Completed peer attempted another model request');
+    const payload = record(await new Request(input, init).json());
+    const note = budgetNote(payload); notes.push(note);
+    expect(note).toMatchObject({ nextReservationHeadroomMicros: 2000 - (ordinal - 1) * 850,
+      phase: ordinal === 3 ? 'wrap_up' : 'working', decision: 'waiting_for_reservations' });
+    const instructions = textContent(payload.system);
+    expect(instructions).toContain('/tmp is discarded when that call ends');
+    expect(instructions).toContain('Publish the first canonical draft through write before rendering');
+    if (!Array.isArray(payload.tools)) throw new Error('Missing actual provider tools');
+    const bash = payload.tools.map(record).find(tool => tool.name === 'bash');
+    expect(bash?.description).toContain('Every call starts a fresh isolated container');
+    expect(bash?.description).toContain('Node Playwright Chromium and Python CairoSVG/PIL');
+    if (ordinal > 1) expect(latestBudgetToolResult(payload).nextReservationHeadroomMicros).toBe(note.nextReservationHeadroomMicros);
+    return toolResponse(ordinal, ordinal === 3 ? 'done' : 'budget');
+  }));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    expect(calls).toBe(3);
+    expect(notes.map(note => note.phase)).toEqual(['working', 'working', 'wrap_up']);
+    expect(notes.map(note => note.nextReservationHeadroomMicros)).toEqual([2000, 1150, 300]);
+    expect(state.status).toBe('completed');
+    expect(state.budget).toMatchObject({ settledMicros: 2550, reservedMicros: 0, uncertainMicros: 0, availableMicros: 5_399_450 });
+  } finally { await runtime.dispose(); }
+}, 15000);
+
+test('the final allowed real Pi turn receives wrap-up advice and can explicitly complete', async () => {
+  const current = await runtimeFixture({ agentCount: 1, maxTurnsPerAgent: 1 });
+  let calls = 0;
+  const runtime = current.createRuntime(intercepted(async (input, init) => {
+    expect(++calls).toBe(1);
+    const note = budgetNote(record(await new Request(input, init).json()));
+    expect(note).toMatchObject({ phase: 'wrap_up', currentRequest: { admitted: true, reservedMicros: 5_400_000, turn: 1, maxTurns: 1, remainingTurnsAfterCurrent: 0 } });
+    expect(note.guidance).toContain('explicit done or honest handoff');
+    return toolResponse(calls, 'done');
+  }));
+  try {
+    await runtime.run(current.run, signal());
+    const state = current.store.getSwarm(current.run.id);
+    expect(calls).toBe(1);
+    expect(state.status).toBe('completed');
+    expect(state.agents[0]?.status).toBe('done');
+    expect(state.budget).toMatchObject({ settledMicros: 850, reservedMicros: 0, uncertainMicros: 0 });
   } finally { await runtime.dispose(); }
 }, 15000);
 
@@ -271,10 +480,13 @@ for (const workingTargetMicros of [100_000, undefined]) {
       const note = budgetNote(payload); notes.push(note);
       expect(note).toMatchObject({ settledMicros: (ordinal - 1) * 850, ownSettledMicros: (ordinal - 1) * 850, workingTargetMicros: workingTargetMicros ?? null, targetRemainingMicros: workingTargetMicros === undefined ? null : workingTargetMicros - (ordinal - 1) * 850, decision: 'ready' });
       expect(note).toMatchObject({ reservedMicros: 5_400_000, availableMicros: 44_600_000 - (ordinal - 1) * 850 });
+      expect(note.currentRequest).toEqual({ admitted: true, reservedMicros: 5_400_000, turn: ordinal, maxTurns: current.run.spec.maxTurnsPerAgent, remainingTurnsAfterCurrent: current.run.spec.maxTurnsPerAgent - ordinal });
       if (ordinal > 1) {
         const { observationSeq, ...result } = latestBudgetToolResult(payload);
         if (typeof observationSeq !== 'number' || !Number.isSafeInteger(observationSeq) || observationSeq <= 0) throw new Error('Budget tool omitted its immutable observation cursor');
         observationSeqs.push(observationSeq); toolResults.push(result);
+        expect(result.currentRequest).toBeNull();
+        expect(result.phase).toBe(note.phase);
         // The preceding tool ran after settlement; this fresh context includes its own new reservation.
         expect(result).toMatchObject({ settledMicros: note.settledMicros, ownSettledMicros: note.ownSettledMicros, workingTargetMicros: note.workingTargetMicros, targetRemainingMicros: note.targetRemainingMicros, reservedMicros: 0, availableMicros: 50_000_000 - (ordinal - 1) * 850, decision: 'ready' });
       }

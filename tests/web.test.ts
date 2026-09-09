@@ -20,6 +20,53 @@ function startRuns(...runs: SwarmRecord[]): void {
   }
 }
 
+describe('run diagnostics HTTP', () => {
+  test('shows an ordinary failed shell result and explicit bail without changing recorded history', async () => {
+    const run = await fixture.launch(); startRuns(run);
+    const peer = actor(run);
+    fixture.store.appendEvent(run.id, peer.agentId, 'tool_execution_start', { toolCallId: 'shell-1', toolName: 'bash', arguments: '{}' });
+    fixture.store.appendEvent(run.id, peer.agentId, 'tool_execution_end', { toolCallId: 'shell-1', toolName: 'bash', isError: false,
+      result: JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ exitCode: 1, stderr: 'missing temporary draft', stdout: '', versions: [] }) }] }) });
+    fixture.store.appendEvent(run.id, peer.agentId, 'agent_stop', { origin: 'agent', code: 'agent_bailed', status: 'bailed', reason: 'Cannot find the published artifact', turn: 3, budget: { ...fixture.store.budget(run.id) } });
+    fixture.store.endAgent(peer, 'bailed', 'Cannot find the published artifact');
+    fixture.store.finishSwarm(run.id, 'bailed', 'Peer reported a blocker');
+    const before = fixture.store.events(run.id);
+    const response = await fixture.request(`/api/swarms/${run.id}/diagnostics`);
+    expect(response.status).toBe(200);
+    const report = await response.json();
+    expect(report.metrics.toolFailures).toBe(1);
+    expect(report.stops[0]).toMatchObject({ origin: 'agent', reason: 'Cannot find the published artifact', turn: 3 });
+    expect(report.stops[0].lastTool).toMatchObject({ name: 'bash', failed: true, exitCode: 1 });
+    expect(report.truncated).toBe(false);
+    expect(fixture.store.events(run.id)).toEqual(before);
+    await fixture.restart();
+    expect(await (await fixture.request(`/api/swarms/${run.id}/diagnostics`)).json()).toEqual(report);
+  });
+  test('diagnostics remain authenticated, read-only and scoped to an existing swarm', async () => {
+    const run = await fixture.launch();
+    const path = `/api/swarms/${run.id}/diagnostics`;
+    expect((await fixture.request(path, { headers: { cookie: '' } })).status).toBe(401);
+    expect((await fixture.request(path, { headers: { origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await fixture.post(path, {})).status).toBe(404);
+    expect((await fixture.request('/api/swarms/missing/diagnostics')).status).toBe(404);
+  });
+  test('reads stop evidence beyond the first trace page without returning assistant content', async () => {
+    const run = await fixture.launch(); startRuns(run); const peer = actor(run);
+    for (let index = 0; index < 1002; index++) fixture.store.appendEvent(run.id, peer.agentId, 'assistant_message', { content: 'private-trace-marker' });
+    fixture.store.appendEvent(run.id, peer.agentId, 'agent_stop', { origin: 'runtime', code: 'turn_limit', status: 'stalled', reason: 'Maximum model turns reached.', turn: 101, budget: { ...fixture.store.budget(run.id) } });
+    fixture.store.endAgent(peer, 'stalled', 'Maximum model turns reached.');
+    fixture.store.finishSwarm(run.id, 'failed', 'Maximum model turns reached.');
+    const readEvents = fixture.store.events.bind(fixture.store); let historyReads = 0;
+    fixture.store.events = (...args) => { historyReads++; return readEvents(...args); };
+    const report = await (await fixture.request(`/api/swarms/${run.id}/diagnostics`)).json();
+    expect(historyReads).toBe(1);
+    expect(report.eventCount).toBeGreaterThan(1002);
+    expect(report.stops[0]).toMatchObject({ origin: 'runtime', code: 'turn_limit', turn: 101 });
+    expect(report.truncated).toBe(false);
+    expect(JSON.stringify(report)).not.toContain('private-trace-marker');
+  });
+});
+
 describe('cross-board message search HTTP', () => {
   test('searches complete historical bodies across swarms with stable snapshots and context links', async () => {
     const first = await fixture.launch({ title: 'First search mission' });

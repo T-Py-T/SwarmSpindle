@@ -4,13 +4,14 @@ import type { AgentStatus, FileChange } from '@simpleswarm/swarm';
 import type { ToolContext } from './contracts.ts';
 import { RuntimeError } from './pricing.ts';
 import { budgetAwareness } from './budget-awareness.ts';
+import { emitDiagnostic } from './diagnostics.ts';
 
 const pathSchema = Type.String({ minLength: 1, maxLength: 512 });
 const reasonSchema = Type.String({ minLength: 1, maxLength: 8000 });
 const textResult = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], details: {} });
 export interface AgentCompletion { status: Extract<AgentStatus, 'done' | 'bailed'>; reason: string; output: string }
 
-export function createSwarmTools(context: ToolContext, complete: (result: AgentCompletion) => void): ToolDefinition[] {
+export function createSwarmTools(context: ToolContext, complete: (result: AgentCompletion) => void, currentTurn: () => number = () => 0): ToolDefinition[] {
   const { store, sandbox, actor, signal } = context;
   const active = () => {
     signal.throwIfAborted();
@@ -50,11 +51,12 @@ export function createSwarmTools(context: ToolContext, complete: (result: AgentC
         if (!content.includes(params.old_text) || content.indexOf(params.old_text) !== content.lastIndexOf(params.old_text)) throw new RuntimeError('edit_ambiguous', 'The original text must appear exactly once.');
         return write(params.path, content.replace(params.old_text, () => params.new_text), params.base_revision, params.reason);
       } }),
-    defineTool({ name: 'bash', label: 'Bash', description: 'Run a command in an isolated disposable snapshot at /workspace, with no network or host access. Python, PIL, Node and Playwright Chromium are installed. Every created/edited/deleted file needs your live claim. All resulting mutations publish atomically; conflicts reject the entire changeset. Use /tmp for disposable candidates.',
+    defineTool({ name: 'bash', label: 'Bash', description: 'Every call starts a fresh isolated container at /workspace with the canonical files and no network or host access. /tmp is discarded when the call ends; create and consume scratch files within that one call. Persist useful work at claimed /workspace paths or with write before rendering. Every canonical file created/edited/deleted needs your live claim. Changes publish atomically; conflicts reject the entire changeset. versions:[] means nothing was published. Node Playwright Chromium and Python CairoSVG/PIL are installed.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 32000 }), timeout_seconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 120 })) }),
-      execute: async (_id, params, toolSignal) => {
+      execute: async (toolCallId, params, toolSignal) => {
         active(); const result = await sandbox.execute({ swarmId: actor.swarmId, agentId: actor.agentId, command: params.command, files: store.files(actor.swarmId), timeoutSeconds: params.timeout_seconds ?? 60, signal: toolSignal ? AbortSignal.any([signal, toolSignal]) : signal });
         active(); const versions = result.changes.length ? store.publishFiles(actor, result.changes, 'Isolated shell changes') : [];
+        emitDiagnostic(store, actor, 'tool_result', () => ({ toolCallId, toolName: 'bash', exitCode: result.exitCode, durationMs: result.durationMs, publishedFiles: versions.length, code: result.exitCode === 0 ? 'ok' : 'command_failed' }));
         return textResult({ exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, durationMs: result.durationMs, versions });
       } }),
     defineTool({ name: 'post', label: 'Post', description: 'Post to a shared thread. All participants see it. Use thread IDs from list_threads.', parameters: Type.Object({ thread_id: Type.String(), body: Type.String({ minLength: 1, maxLength: 20000 }) }), execute: async (_id, params) => { active(); return textResult(store.post(actor, params.thread_id, params.body)); } }),
@@ -79,6 +81,7 @@ export function createSwarmTools(context: ToolContext, complete: (result: AgentC
     defineTool({ name: 'file_restore', label: 'Restore version', description: 'Restore a historic canonical version under your live claim.', parameters: Type.Object({ path: pathSchema, revision: Type.Integer({ minimum: 1 }), reason: reasonSchema }), execute: async (_id, params) => { active(); return textResult(store.restoreFile(actor, params.path, params.revision, params.reason)); } }),
     defineTool({ name: 'done', label: 'Done', description: 'End your participation when the definition of done is proven, or explicitly bail. Explain evidence and final output. This permanently stops your session.', parameters: Type.Object({ done_reasoning: reasonSchema, output: Type.Optional(Type.String({ maxLength: 20000 })), bail: Type.Optional(Type.Boolean()) }), execute: async (_id, params) => {
       active(); const completion: AgentCompletion = { status: params.bail ? 'bailed' : 'done', reason: params.done_reasoning, output: params.output ?? '' };
+      emitDiagnostic(store, actor, 'agent_stop', () => ({ origin: 'agent', code: completion.status, reason: completion.reason, status: completion.status, turn: currentTurn(), budget: { ...store.budget(actor.swarmId) } }));
       store.endAgent(actor, completion.status, completion.reason, completion.output); complete(completion); return textResult({ status: completion.status });
     } }),
   ];

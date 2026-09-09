@@ -1,5 +1,5 @@
 import type { AgentRecord, SwarmRecord } from '@simpleswarm/swarm';
-import { describeRun, summarizeRuns, type OutcomeFilter } from './overview-model.ts';
+import { describeArtifactReview, describeRun, summarizeRuns, type OutcomeFilter } from './overview-model.ts';
 
 function escape(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
@@ -28,7 +28,7 @@ export function renderOverview(runs: SwarmRecord[], filter: OutcomeFilter): stri
   const summary = summarizeRuns(runs);
   const metrics: Array<{ outcome: Exclude<OutcomeFilter, 'all'>; label: string; detail: string }> = [
     { outcome: 'active', label: 'Active & queued', detail: 'Running, queued or stopping' },
-    { outcome: 'review', label: 'Claims awaiting review', detail: 'Completion reported; acceptance unverified' },
+    { outcome: 'review', label: 'Completion claims', detail: 'Inspect the separate artifact review' },
     { outcome: 'incomplete', label: 'Stopped incomplete', detail: 'Inspect the outcome and recorded reason' },
   ];
   return `<div class="overview-heading overview-home-heading"><div><div class="eyebrow">WORKSPACE OVERVIEW</div><h1>Your swarms</h1><p class="muted">See what is working, what needs review, and what stopped.</p></div>
@@ -56,12 +56,27 @@ function agentActivity(agents: AgentRecord[]): string {
   return `<section class="overview-agent-activity" aria-label="Agent activity"><div class="overview-section-line"><h3>${count(agents.length)} agents</h3><span>${count(toolCalls)} tool calls · ${count(tokens)} tokens</span></div><ul class="overview-agent-counts">${agentStatuses.filter(item => counts.has(item.status)).map(item => `<li><strong>${count(counts.get(item.status)!)}</strong> ${item.label}</li>`).join('') || '<li>No agents recorded</li>'}</ul></section>`;
 }
 
+export function renderArtifactReview(run: SwarmRecord): string {
+  const review = describeArtifactReview(run);
+  const assessment = run.artifactAssessment;
+  const heading = `<div class="overview-section-line"><h3>Artifact review</h3><span class="artifact-review-verdict artifact-review-${review.verdict}">${review.label}</span></div><p class="artifact-review-explanation">${review.explanation}</p>`;
+  if (!assessment) return `<section class="artifact-review" aria-label="Artifact review" data-artifact-review="not_reviewed">${heading}</section>`;
+  const failedChecks = assessment.checks.filter(check => !check.passed);
+  return `<section class="artifact-review" aria-label="Artifact review" data-artifact-review="${review.verdict}">${heading}
+    ${failedChecks.length > 0 ? `<p class="artifact-review-failures"><strong>Failed criteria:</strong> ${failedChecks.map(check => escape(check.name)).join(' · ')}</p>` : ''}
+    <details class="artifact-review-details"${assessment.checks.length <= 3 ? ' open' : ''}><summary>Review evidence · ${count(assessment.checks.length - failedChecks.length)} passed · ${count(failedChecks.length)} failed</summary>
+      <ul class="artifact-review-checks">${assessment.checks.map(check => `<li class="artifact-check-${check.passed ? 'passed' : 'failed'}"><div><span class="artifact-check-result">${check.passed ? 'Passed' : 'Failed'}</span><strong>${escape(check.name)}</strong></div><p>${escape(check.evidence)}</p></li>`).join('')}</ul>
+      <dl class="artifact-review-identity"><div><dt>Reviewed path</dt><dd><code>${escape(assessment.path)}</code></dd></div><div><dt>Revision</dt><dd>${assessment.revision === 0 ? '0 · no published revision' : count(assessment.revision)}</dd></div><div><dt>Artifact SHA-256</dt><dd><code>${assessment.sha256 === null ? 'No artifact hash recorded' : escape(assessment.sha256)}</code></dd></div><div><dt>Definition of done SHA-256</dt><dd><code>${escape(assessment.definitionOfDoneSha256)}</code></dd></div><div><dt>Reviewed</dt><dd>${timestamp(assessment.createdAt, 'Not recorded')}</dd></div></dl>
+    </details></section>`;
+}
+
 export function renderRunCard(run: SwarmRecord): string {
   const outcome = describeRun(run);
   return `<article class="row swarm-row overview-run" data-outcome-group="${outcome.group}">
     <div class="overview-run-heading"><div class="overview-run-identity"><button type="button" class="row-title" data-run="${escape(run.id)}">${escape(run.spec.title)} <span aria-hidden="true">↗</span></button><div class="overview-run-model">${escape(run.spec.model.id)} · ${escape(run.spec.model.thinking)}</div></div><span class="overview-outcome overview-outcome-${outcome.group}">${escape(outcome.label)}</span></div>
     <div class="overview-run-outcome"><p>${escape(outcome.explanation)}</p>${run.reason ? `<p class="overview-run-reason"><strong>Recorded reason</strong> ${escape(run.reason)}</p>` : ''}${outcome.targetReached ? '<span class="overview-target">Working target reached</span>' : ''}</div>
     <div class="overview-expected-output"><span>Expected output</span><code>${escape(run.spec.finalOutput)}</code></div>
+    ${renderArtifactReview(run)}
     ${agentActivity(run.agents)}
     <div class="overview-run-budget"><dl class="overview-costs">${costCells(run.budget.settledMicros, run.budget.reservedMicros, run.budget.uncertainMicros)}</dl><p>USD-equivalent · Hard ceiling ${money(run.budget.capMicros)}${run.spec.workingTargetMicros === undefined ? '' : ` · Working target ${money(run.spec.workingTargetMicros)}`}</p></div>
     <div class="overview-run-footer"><dl class="overview-run-times"><div><dt>Created</dt><dd>${timestamp(run.createdAt, 'Not recorded')}</dd></div><div><dt>Started</dt><dd>${timestamp(run.startedAt, 'Not started')}</dd></div><div><dt>Ended</dt><dd>${timestamp(run.endedAt, 'Not ended')}</dd></div></dl></div>
