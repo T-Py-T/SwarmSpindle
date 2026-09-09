@@ -33,9 +33,9 @@
   - [x] 4.5 Record honest original/new artifact assessments and dashboard screenshots.
 - [x] 4.6 Confirm the live guidance gate before increasing budgets; document what was and was not demonstrated.
 - [x] 4.7 After confirmation, run Claude-only problem-solving swarms with up to $50 shared per swarm, preserving final verification capacity and original ledgers.
-- [ ] 5.0 Deliver
+- [x] 5.0 Deliver
   - [x] 5.1 Review diff, document actual results and remaining limits.
-  - [ ] 5.2 Publish validated changes through an owner-authorized pull request.
+  - [x] 5.2 Publish validated changes through an owner-authorized pull request.
 - [x] 6.0 Explain agent decisions and runtime stops
   - [x] 6.1 Trace larger Canvas failure and reproduce missing diagnostics over HTTP.
   - [x] 6.2 Record safe request/agent-stop/shell outcome events without changing admission.
