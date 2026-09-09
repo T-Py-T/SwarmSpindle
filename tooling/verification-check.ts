@@ -18,7 +18,7 @@ for (const fixture of manifest.fixtures) {
   const code = await run(['tooling/verify-artifact.ts', fixture.swarmId, fixture.kind, output]);
   const report = await Bun.file(`${output}/verification.json`).json();
   const failed = Object.entries(report.checks).filter(([, passed]) => passed !== true).map(([name]) => name).sort();
-  if (code !== 1 || report.failure !== null || report.providerCallsInitiated !== 0 || JSON.stringify(failed) !== JSON.stringify(fixture.expectedFailedChecks)) {
+  if (code !== 1 || report.failure !== null || report.providerCallsInitiated !== 0 || report.artifactMechanicalChecksPassed !== true || JSON.stringify(failed) !== JSON.stringify(fixture.expectedFailedChecks)) {
     throw new Error(`Unexpected verifier result: ${JSON.stringify({ kind: fixture.kind, code, failure: report.failure, failed })}`);
   }
   console.log(JSON.stringify({ fixture: fixture.kind, browserChecksPassed: true, correctlyRejectedSyntheticModelEvidence: true }));

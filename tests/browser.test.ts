@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { chromium, expect as browserExpect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { openSwarmStore } from '@simpleswarm/swarm';
 import { createWebServers } from '../apps/web/server.ts';
@@ -114,6 +115,63 @@ browserTests('actual dashboard in installed Microsoft Edge', () => {
     await browserExpect(page.locator('#connection')).toHaveText('● connected', { timeout: 10000 });
     await browserExpect(page.locator('[data-view="threads"]')).toHaveClass('selected');
   }
+
+  test('explains runtime stops and failed shell commands in the real insights dialog on desktop and phone', async () => {
+    const { run, actor } = await seedRunningSwarm('Failure insight acceptance');
+    fixture.store.appendEvent(run.id, actor.agentId, 'tool_execution_start', { toolCallId: 'failed-shell', toolName: 'bash', arguments: '{}' });
+    fixture.store.appendEvent(run.id, actor.agentId, 'tool_execution_end', { toolCallId: 'failed-shell', toolName: 'bash', isError: false,
+      result: JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ exitCode: 1, versions: [], stderr: 'temporary file missing' }) }] }) });
+    const reason = 'Provider transport failed (ECONNRESET). <img src=x onerror=alert(1)>';
+    fixture.store.appendEvent(run.id, actor.agentId, 'agent_stop', { origin: 'runtime', code: 'provider_transport_error', reason, status: 'failed', turn: 5, budget: { ...fixture.store.budget(run.id) } });
+    fixture.store.endAgent(actor, 'failed', reason);
+    fixture.store.finishSwarm(run.id, 'failed', reason);
+    await selectSwarm(run.id);
+    await page.locator('[data-action="diagnostics"]').click();
+    const content = page.locator('#diagnostics-content');
+    await browserExpect(content).toContainText('ECONNRESET');
+    await browserExpect(content).toContainText('provider_transport_error');
+    await browserExpect(content).toContainText('runtime', { ignoreCase: true });
+    expect(await content.locator('img').count()).toBe(0);
+    await browserExpect(content.locator(`[data-diagnostic-agent="${actor.agentId}"]`)).toContainText('bash');
+    await browserExpect(content.locator(`[data-diagnostic-agent="${actor.agentId}"]`)).toContainText('1');
+    await page.locator('[data-action="refresh-diagnostics"]').click();
+    await browserExpect(content).toContainText('ECONNRESET');
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await mkdir(new URL('../.artifacts/browser/', import.meta.url), { recursive: true });
+    await page.screenshot({ path: new URL('../.artifacts/browser/diagnostics-phone.png', import.meta.url).pathname });
+  }, 15000);
+
+  test('shows persisted failed artifact evidence separately from execution on desktop and phone', async () => {
+    const { run } = await seedRunningSwarm('Reviewed stopped experiment');
+    fixture.store.finishSwarm(run.id, 'budget_exhausted', 'No request capacity remains.');
+    const current = fixture.store.getSwarm(run.id);
+    const file = fixture.store.readFile(run.id, current.spec.finalOutput);
+    const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+    fixture.store.recordArtifactAssessment(run.id, {
+      path: file.path, revision: file.revision, sha256: hash(Buffer.from(file.contentBase64, 'base64')),
+      definitionOfDoneSha256: hash(current.spec.definitionOfDone),
+      checks: [{ name: 'Render available', passed: true, evidence: 'Reviewed the canonical output.' },
+        { name: 'Riding contact', passed: false, evidence: '<img src=x onerror=alert(1)> Contact remains unresolved.' }],
+    });
+    const ledger = fixture.store.reservations(run.id);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(servers.origin, { waitUntil: 'domcontentloaded' });
+      const card = page.locator('.overview-run');
+      await browserExpect(card.locator('.overview-outcome')).toHaveText('Request capacity exhausted');
+      await browserExpect(card.locator('[data-artifact-review="failed"]')).toBeVisible();
+      await browserExpect(card.locator('.artifact-review-failures')).toContainText('Riding contact');
+      await browserExpect(card.locator('.artifact-review-checks')).toContainText('<img src=x onerror=alert(1)>');
+      await browserExpect(card.locator('.artifact-review img, .artifact-review script')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+      await page.locator(`[data-run="${run.id}"]`).click();
+      await browserExpect(page.locator('#summary [data-artifact-review="failed"]')).toBeVisible();
+      await browserExpect(page.locator('#summary')).toContainText('Contact remains unresolved.');
+    }
+    expect(fixture.store.reservations(run.id)).toEqual(ledger);
+  }, 30000);
 
   async function screenshot(name: string): Promise<void> {
     const directory = process.env.SIMPLESWARM_SCREENSHOTS_DIR;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseSwarmSpec, type AgentStatus, type RunStatus, type SwarmRecord } from '@simpleswarm/swarm';
-import { describeRun, summarizeRuns, type OutcomeFilter } from '../apps/web/overview-model.ts';
+import { describeArtifactReview, describeRun, summarizeRuns, type OutcomeFilter } from '../apps/web/overview-model.ts';
+import { renderArtifactReview, renderRunCard } from '../apps/web/overview.ts';
 
 function run(status: RunStatus, options: {
   settledMicros?: number; reservedMicros?: number; uncertainMicros?: number;
@@ -129,5 +130,99 @@ describe('overview ledger totals', () => {
     summary.settledMicros = 0;
     expect(summarizeRuns(runs).settledMicros).toBe(250_000);
     expect(runs).toEqual(before);
+  });
+});
+
+function assessment(verdict: 'passed' | 'failed'): NonNullable<SwarmRecord['artifactAssessment']> {
+  return {
+    path: 'result.svg', revision: 2, sha256: 'a'.repeat(64), definitionOfDoneSha256: 'b'.repeat(64),
+    createdAt: 2000, verdict, checks: [{ name: 'Pelican silhouette', passed: verdict === 'passed', evidence: verdict === 'passed' ? 'The reviewed revision shows the required silhouette.' : 'The reviewed image has no visible pelican bill.' }],
+  };
+}
+
+describe('artifact review stays separate from run outcome', () => {
+  test('a passed artifact review cannot turn request exhaustion into run completion or erase its liabilities', () => {
+    const exhausted = run('budget_exhausted', { settledMicros: 147, reservedMicros: 400_000, uncertainMicros: 500_000 });
+    const before = summarizeRuns([exhausted]);
+    exhausted.artifactAssessment = assessment('passed');
+    expect(describeArtifactReview(exhausted)).toMatchObject({ verdict: 'passed', label: 'Passed' });
+    expect(describeRun(exhausted)).toMatchObject({ group: 'incomplete', label: 'Request capacity exhausted' });
+    expect(summarizeRuns([exhausted])).toEqual(before);
+    const html = renderRunCard(exhausted);
+    expect(html).toContain('data-outcome-group="incomplete"');
+    expect(html).toContain('data-artifact-review="passed"');
+    expect(html).toContain('Request capacity exhausted');
+    expect(html).toContain('$0.000147');
+    expect(html).toContain('$0.40');
+    expect(html).toContain('$0.50');
+    expect(html.match(/data-run=/g)).toHaveLength(1);
+  });
+
+  test('failed review exposes a completed run’s failed criterion without changing its canonical claim', () => {
+    const completed = run('completed', { agentStatuses: ['done', 'done'] });
+    completed.artifactAssessment = assessment('failed');
+    expect(describeRun(completed)).toMatchObject({ group: 'review', label: 'Completion reported · artifact reviewed' });
+    expect(describeRun(completed).explanation).not.toContain('has not been recorded');
+    expect(describeArtifactReview(completed)).toMatchObject({ verdict: 'failed', label: 'Failed' });
+    const html = renderRunCard(completed);
+    expect(html).toContain('Completion reported · artifact reviewed');
+    expect(html).toContain('data-artifact-review="failed"');
+    expect(html).toContain('Failed criteria:');
+    expect(html).toContain('Pelican silhouette');
+    expect(html).toContain('The reviewed image has no visible pelican bill.');
+    expect(html).toContain('class="artifact-review-details" open');
+    expect(html).toContain('<dt>Revision</dt><dd>2</dd>');
+    expect(html).toContain('a'.repeat(64));
+    expect(html).toContain('b'.repeat(64));
+    expect(html).toContain('1970-01-01T00:00:02.000Z');
+  });
+
+  test('absent and null assessments make no output-existence or success claim', () => {
+    for (const artifactAssessment of [undefined, null]) {
+      const unreviewed = { ...run('completed'), artifactAssessment };
+      expect(describeArtifactReview(unreviewed)).toMatchObject({ verdict: 'not_reviewed', label: 'Not reviewed' });
+      const html = renderRunCard(unreviewed);
+      expect(html).toContain('Expected output');
+      expect(html).toContain('data-artifact-review="not_reviewed"');
+      expect(html).toContain('does not establish that a file exists or that the task succeeded');
+      expect(html).not.toContain('Reviewed path');
+      expect(html).not.toContain('artifact-review-details');
+    }
+  });
+
+  test('missing-file review displays its failed evidence without inventing a revision or hash', () => {
+    const missing = run('failed');
+    missing.artifactAssessment = { ...assessment('failed'), revision: 0, sha256: null,
+      checks: [{ name: 'Expected file exists', passed: false, evidence: 'No canonical result.svg was published.' }] };
+    const html = renderArtifactReview(missing);
+    expect(html).toContain('0 · no published revision');
+    expect(html).toContain('No artifact hash recorded');
+    expect(html).toContain('No canonical result.svg was published.');
+    expect(html).not.toContain('a'.repeat(64));
+  });
+
+  test('criteria and all artifact identifiers are escaped before HTML rendering', () => {
+    const hostile = '<img src=x onerror="alert(1)"> & \'quoted\'';
+    const reviewed = run('failed');
+    reviewed.artifactAssessment = { ...assessment('failed'), path: hostile, sha256: hostile,
+      definitionOfDoneSha256: hostile, checks: [{ name: hostile, evidence: hostile, passed: false }] };
+    const before = structuredClone(reviewed);
+    const html = renderArtifactReview(reviewed);
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain(hostile);
+    expect(html).toContain('&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;quoted&#39;');
+    expect(reviewed).toEqual(before);
+  });
+
+  test('large reviews keep the failed criteria visible while collapsing the complete checklist', () => {
+    const reviewed = run('completed');
+    reviewed.artifactAssessment = { ...assessment('failed'), checks: Array.from({ length: 6 }, (_, index) => ({
+      name: `Criterion ${index + 1}`, passed: index !== 4, evidence: `Recorded evidence ${index + 1}`,
+    })) };
+    const html = renderArtifactReview(reviewed);
+    expect(html).toContain('Review evidence · 5 passed · 1 failed');
+    expect(html).toContain('<strong>Failed criteria:</strong> Criterion 5');
+    expect(html).not.toContain('class="artifact-review-details" open');
+    expect(html).toContain('Recorded evidence 6');
   });
 });

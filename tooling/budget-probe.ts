@@ -12,7 +12,7 @@ function record(value: unknown): Record<string, unknown> | null {
 export function assessBudgetProbe(run: SwarmRecord, events: TraceEvent[], messages: BoardMessage[], hasReport: boolean) {
   const observations = new Map(events.filter(event => event.kind === 'budget_observed' && event.swarmId === run.id).map(event => [event.seq, event]));
   const posted = new Map(events.filter(event => event.kind === 'message_posted' && event.swarmId === run.id).map(event => [record(event.payload)?.messageId, event]));
-  const fields = ['decision', 'settledMicros', 'reservedMicros', 'uncertainMicros', 'workingTargetMicros', 'targetRemainingMicros', 'nextRequestCeilingMicros'];
+  const fields = ['capMicros', 'availableMicros', 'decision', 'settledMicros', 'reservedMicros', 'uncertainMicros', 'workingTargetMicros', 'targetRemainingMicros', 'nextRequestCeilingMicros'];
   const checkpoints = messages.flatMap(message => {
     if (message.swarmId !== run.id || !run.agents.some(agent => agent.id === message.authorId)) return [];
     let claim: Record<string, unknown> | null;

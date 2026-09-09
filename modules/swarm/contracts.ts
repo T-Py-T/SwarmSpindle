@@ -28,10 +28,17 @@ export interface BudgetSnapshot {
   capMicros: number; settledMicros: number; reservedMicros: number;
   uncertainMicros: number; availableMicros: number;
 }
+/** Operator-recorded review bound to one artifact and definition of done; not a runtime success claim. */
+export interface ArtifactAssessment {
+  path: string; revision: number; sha256: string | null; definitionOfDoneSha256: string;
+  createdAt: number; verdict: 'passed' | 'failed';
+  checks: Array<{ name: string; passed: boolean; evidence: string }>;
+}
 export interface SwarmRecord {
   id: string; spec: SwarmSpec; status: RunStatus; createdAt: number;
   startedAt: number | null; endedAt: number | null; reason: string | null;
   workerId: string | null; agents: AgentRecord[]; budget: BudgetSnapshot;
+  artifactAssessment?: ArtifactAssessment | null;
 }
 export interface ThreadRecord { id: string; swarmId: string; title: string; createdAt: number; updatedAt: number; members: string[]; messageCount: number }
 export interface BoardMessage { id: number; swarmId: string; threadId: string; authorId: string; body: string; createdAt: number }
@@ -55,6 +62,8 @@ export interface SwarmStore {
   createSwarm(spec: SwarmSpec, initialFiles?: FileChange[]): SwarmRecord;
   listSwarms(): SwarmRecord[];
   getSwarm(swarmId: string): SwarmRecord;
+  /** Operator application only; never expose as an agent tool. Input excludes server-derived verdict and createdAt. */
+  recordArtifactAssessment(swarmId: string, input: unknown): ArtifactAssessment;
   claimNextSwarm(workerId: string): SwarmRecord | null;
   stopSwarm(swarmId: string, reason: string): SwarmRecord;
   finishSwarm(swarmId: string, status: Exclude<RunStatus, 'queued' | 'running' | 'stopping'>, reason: string): SwarmRecord;

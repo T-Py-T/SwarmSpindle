@@ -51,8 +51,29 @@ const outcomes: Record<RunStatus, Omit<RunDescription, 'targetReached'>> = {
 export function describeRun(run: SwarmRecord): RunDescription {
   return {
     ...outcomes[run.status],
+    ...(run.status === 'completed' && run.artifactAssessment ? {
+      label: 'Completion reported · artifact reviewed',
+      explanation: 'All peers reported completion. The recorded artifact review is shown separately and does not change this run outcome.',
+    } : {}),
     targetReached: run.spec.workingTargetMicros !== undefined
       && run.budget.settledMicros >= run.spec.workingTargetMicros,
+  };
+}
+
+export function describeArtifactReview(run: SwarmRecord): {
+  verdict: 'passed' | 'failed' | 'not_reviewed'; label: string; explanation: string;
+} {
+  if (!run.artifactAssessment) return {
+    verdict: 'not_reviewed', label: 'Not reviewed',
+    explanation: 'No current artifact review is recorded. An expected output path does not establish that a file exists or that the task succeeded.',
+  };
+  if (run.artifactAssessment.verdict === 'passed') return {
+    verdict: 'passed', label: 'Passed',
+    explanation: 'The recorded review passed its checks for the identified artifact and definition of done. This review does not change the run outcome.',
+  };
+  return {
+    verdict: 'failed', label: 'Failed',
+    explanation: 'The recorded artifact review failed. Inspect the criteria and evidence below; the run outcome is recorded separately.',
   };
 }
 

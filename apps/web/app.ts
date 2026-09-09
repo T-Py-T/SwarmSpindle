@@ -1,7 +1,8 @@
 import { describeRun, type OutcomeFilter } from './overview-model.ts';
-import { renderOverview, renderRunCard } from './overview.ts';
+import { renderArtifactReview, renderOverview, renderRunCard } from './overview.ts';
 import { createMessageSearch } from './message-search.ts';
-import type { AgentRecord, BoardMessage, FileClaim, FileVersion, SwarmRecord, ThreadRecord, TraceEvent } from '@simpleswarm/swarm';
+import { renderDiagnostics } from './diagnostics.ts';
+import type { AgentRecord, BoardMessage, FileClaim, FileVersion, SwarmDiagnostics, SwarmRecord, ThreadRecord, TraceEvent } from '@simpleswarm/swarm';
 
 let outcomeFilter: OutcomeFilter = 'all';
 
@@ -12,6 +13,7 @@ interface ThreadPage { threads: ThreadSummary[]; next: number | null }
 interface MessagePage { messages: BoardMessage[]; next: number | null }
 interface Conversation { swarmId: string; threadId: string; cursor: number; count: number; loading: boolean; pending: boolean }
 interface TraceView { swarmId: string; agentId: string | null; version: number; container: HTMLElement; count: HTMLElement; rows: Map<number, HTMLDetailsElement> }
+interface DiagnosticsView { swarmId: string; version: number; container: HTMLElement; loading: boolean; html: string }
 const $ = <T extends HTMLElement>(id: string): T => { const element = document.getElementById(id); if (!element) throw new Error(`Missing ${id}`); return element as T; };
 const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content;
 const previewOrigin = document.querySelector<HTMLMetaElement>('meta[name="preview-origin"]')!.content;
@@ -25,6 +27,7 @@ let threadRequestVersion = 0;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let conversation: Conversation | null = null;
 let traceView: TraceView | null = null;
+let diagnosticsView: DiagnosticsView | null = null;
 const traceLimit = 10_000;
 let traceFrame: number | undefined;
 let pendingTraceEvents: Array<{ event: TraceEvent; version: number }> = [];
@@ -68,7 +71,7 @@ function render(): void {
   $('board-layout').classList.toggle('with-conversation', state.view === 'threads' && Boolean(conversation));
   if (state.view !== 'swarms' && run) {
     const total = totals(run);
-    $('summary').innerHTML = `<div class="summary-top"><div><div class="eyebrow">${escape(run.id)} · ${duration(run)} · ${run.agents.length} agents</div><h1>${escape(run.spec.title)}</h1>${status(run.status)} ${run.status === 'completed' ? '<span class="pill">Completion claimed · review required</span>' : ''}${describeRun(run).targetReached ? '<span class="pill">Working target reached</span>' : ''} <span class="pill">${escape(run.spec.model.id)} / ${escape(run.spec.model.thinking)}</span><div class="summary-actions"><button data-action="goal">STARTING GOAL</button><button data-action="files">FILES & CLAIMS</button><button data-action="trace">RAW TRACE</button>${terminals.has(run.status) ? '' : '<button data-action="stop" class="danger">STOP SWARM</button>'}</div>${run.status === 'completed' ? '<p class="budget-explanation">Agent completion is unverified. Review the canonical output against the definition of done before treating this as a successful result.</p>' : ''}${run.reason ? `<p class="muted">${escape(run.reason)}</p>` : ''}</div><div class="stats"><div class="price">${dollars(run.budget.settledMicros)}</div><div class="muted">verified usage · USD-equivalent</div><div class="muted">${count(total.tokens)} tokens | ${count(total.calls)} calls</div></div></div>${budget(run)}${run.spec.workingTargetMicros === undefined ? '' : `<p class="budget-explanation">Working target ${dollars(run.spec.workingTargetMicros)} · ${dollars(Math.max(0, run.spec.workingTargetMicros - run.budget.settledMicros))} remaining against verified usage. Existing requests may finish above this target; the separate hard ceiling stays enforced.</p>`}`;
+    $('summary').innerHTML = `<div class="summary-top"><div><div class="eyebrow">${escape(run.id)} · ${duration(run)} · ${run.agents.length} agents</div><h1>${escape(run.spec.title)}</h1>${status(run.status)} ${run.status === 'completed' ? '<span class="pill">Completion claimed · review required</span>' : ''}${describeRun(run).targetReached ? '<span class="pill">Working target reached</span>' : ''} <span class="pill">${escape(run.spec.model.id)} / ${escape(run.spec.model.thinking)}</span><div class="summary-actions"><button data-action="diagnostics" class="insights-action">${terminals.has(run.status) ? 'WHY IT STOPPED' : 'RUN INSIGHTS'}</button><button data-action="goal">STARTING GOAL</button><button data-action="files">FILES & CLAIMS</button><button data-action="trace">RAW TRACE</button>${terminals.has(run.status) ? '' : '<button data-action="stop" class="danger">STOP SWARM</button>'}</div>${run.status === 'completed' && !run.artifactAssessment ? '<p class="budget-explanation">Agent completion is unverified. Review the canonical output against the definition of done before treating this as a successful result.</p>' : ''}${run.reason ? `<p class="muted">${escape(run.reason)}</p>` : ''}</div><div class="stats"><div class="price">${dollars(run.budget.settledMicros)}</div><div class="muted">verified usage · USD-equivalent</div><div class="muted">${count(total.tokens)} tokens | ${count(total.calls)} calls</div></div></div>${renderArtifactReview(run)}${budget(run)}${run.spec.workingTargetMicros === undefined ? '' : `<p class="budget-explanation">Working target ${dollars(run.spec.workingTargetMicros)} · ${dollars(Math.max(0, run.spec.workingTargetMicros - run.budget.settledMicros))} remaining against verified usage. Existing requests may finish above this target; the separate hard ceiling stays enforced.</p>`}`;
   } else $('summary').innerHTML = renderOverview(state.runs, outcomeFilter);
   $('sort-label').hidden = state.view !== 'threads'; $('filter-label').hidden = state.view !== 'threads';
   renderRows(); renderTimeline();
@@ -212,6 +215,49 @@ function scheduleTraceEvent(event: TraceEvent): void {
   });
 }
 
+function diagnosticsIsCurrent(current: DiagnosticsView): boolean {
+  return diagnosticsView === current && current.swarmId === state.selected && current.version === selectionVersion
+    && state.dialog?.kind === 'diagnostics' && current.container.isConnected && $<HTMLDialogElement>('detail').open;
+}
+
+async function refreshDiagnostics(): Promise<void> {
+  const current = diagnosticsView;
+  if (!current || current.loading || !diagnosticsIsCurrent(current)) return;
+  current.loading = true;
+  current.container.setAttribute('aria-busy', 'true');
+  try {
+    const diagnostics = await api<SwarmDiagnostics>(`/api/swarms/${encodeURIComponent(current.swarmId)}/diagnostics`);
+    if (!diagnosticsIsCurrent(current)) return;
+    const html = renderDiagnostics(diagnostics);
+    if (html !== current.html) {
+      const dialog = $('detail');
+      const scrollTop = dialog.scrollTop;
+      const details = [...current.container.querySelectorAll('details')];
+      const opened = details.map(item => item.open);
+      const focused = details.findIndex(item => item.querySelector('summary') === document.activeElement);
+      current.container.innerHTML = html;
+      current.container.querySelectorAll('details').forEach((item, index) => {
+        item.open = opened[index] ?? item.open;
+        if (focused === index) item.querySelector('summary')?.focus({ preventScroll: true });
+      });
+      dialog.scrollTop = scrollTop;
+      current.html = html;
+    }
+    $('diagnostics-error').hidden = true;
+    if (state.detail?.run.id === current.swarmId) $('detail-title').textContent = terminals.has(state.detail.run.status) ? 'Why it stopped' : 'Run insights';
+  } catch (error) {
+    if (diagnosticsIsCurrent(current)) {
+      const notice = $('diagnostics-error');
+      notice.textContent = `Could not refresh run insights: ${message(error)}`;
+      notice.hidden = false;
+      if (!current.html) current.container.textContent = 'No diagnostic result loaded. Use Refresh insights to try again.';
+    }
+  } finally {
+    current.loading = false;
+    if (diagnosticsIsCurrent(current)) current.container.removeAttribute('aria-busy');
+  }
+}
+
 async function refresh(): Promise<void> {
   if (refreshing) return; refreshing = true;
   const selected = state.selected;
@@ -236,6 +282,7 @@ async function refresh(): Promise<void> {
       if ((state.detail.threads.find(thread => thread.id === current.threadId)?.messageCount ?? 0) > current.count) await refreshConversation(current);
     }
     await refreshThreads();
+    await refreshDiagnostics();
   } catch (error) {
     if (state.selected === selected && selectionVersion === version) { notice(message(error)); $('connection').textContent = 'disconnected'; }
   }
@@ -245,7 +292,7 @@ function scheduleRefresh(): void { if (!refreshTimer) refreshTimer = setTimeout(
 async function selectRun(id: string): Promise<void> {
   const version = ++selectionVersion;
   threadRequestVersion += 1;
-  saveDraft(); conversation=null; traceView=null; state.dialog=null; messageSearch.reset();
+  saveDraft(); conversation=null; traceView=null; diagnosticsView=null; state.dialog=null; messageSearch.reset();
   $<HTMLDialogElement>('detail').close();
   state.source?.close(); state.source=null; state.selected=id; state.view='threads'; state.events=[]; state.detail=null; state.threads=[];
   $<HTMLInputElement>('search').value='';
@@ -277,9 +324,17 @@ async function showDetail(kind: string, id?: string): Promise<void> {
   if (kind === 'thread' && !state.detail.threads.some(thread => thread.id === id) && !state.threads.some(thread => thread.id === id)) throw new Error('This thread does not belong to the selected swarm.');
   if (kind === 'thread' && conversation?.swarmId === state.selected && conversation.threadId === id) { await refreshConversation(); return; }
   if ((kind === 'trace' || kind === 'agent') && traceView?.swarmId === state.selected && traceView.agentId === (kind === 'agent' ? id : null) && traceView.version === selectionVersion) { updateTraceView(state.events); return; }
-  saveDraft(); conversation = null; traceView = null; $('board-conversation').hidden = true; $('board-layout').classList.remove('with-conversation');
+  saveDraft(); conversation = null; traceView = null; diagnosticsView = null; $('board-conversation').hidden = true; $('board-layout').classList.remove('with-conversation');
   state.dialog={kind,id}; const run=state.detail.run;
   const title=$('detail-title'); const body=$('detail-body'); $('message-form').hidden=true;
+  if(kind==='diagnostics') {
+    title.textContent=terminals.has(run.status) ? 'Why it stopped' : 'Run insights';
+    body.innerHTML=`<div class="diagnostics-toolbar"><span>Recorded execution evidence</span><a href="/api/swarms/${encodeURIComponent(run.id)}/diagnostics" download="run-insights.json">Download insights JSON</a><button data-action="refresh-diagnostics">REFRESH INSIGHTS</button></div><p id="diagnostics-error" class="error" role="status" hidden></p><div id="diagnostics-content" aria-live="polite"><p class="muted">Loading run insights…</p></div>`;
+    diagnosticsView = { swarmId: run.id, version: selectionVersion, container: $('diagnostics-content'), loading: false, html: '' };
+    if(!$<HTMLDialogElement>('detail').open) $<HTMLDialogElement>('detail').showModal();
+    await refreshDiagnostics();
+    return;
+  }
   if(kind==='goal') { title.textContent='Starting goal'; body.innerHTML=goal(run); }
   if(kind==='thread' && id) {
     const thread=state.detail.threads.find(item=>item.id===id) ?? state.threads.find(item=>item.id===id); $('board-title').textContent=thread?.title ?? 'Thread';
@@ -320,7 +375,8 @@ async function handleClick(event: MouseEvent): Promise<void> {
   if(button.dataset.thread) await showDetail('thread',button.dataset.thread);
   if(button.dataset.agent) await showDetail('agent',button.dataset.agent);
   const action=button.dataset.action;
-  if(action && ['goal','files','trace'].includes(action)) await showDetail(action);
+  if(action && ['goal','files','trace','diagnostics'].includes(action)) await showDetail(action);
+  if(action==='refresh-diagnostics') await refreshDiagnostics();
   if(action==='refresh-thread' && conversation) await refreshConversation();
   if(action==='refresh-trace' && state.dialog) await showDetail(state.dialog.kind,state.dialog.id);
   if(action==='expand-trace') $('detail-body').querySelectorAll('details').forEach(item=>item.open=true);
@@ -347,7 +403,7 @@ $('search').addEventListener('input',()=>{
 });
 $('sort').addEventListener('change',renderRows);$('filter').addEventListener('change',renderRows);
 $('close-detail').onclick=()=>{$<HTMLDialogElement>('detail').close();};
-$('detail').addEventListener('close',()=>{if(!$<HTMLDialogElement>('detail').open){state.dialog=null;traceView=null;}});
+$('detail').addEventListener('close',()=>{if(!$<HTMLDialogElement>('detail').open){state.dialog=null;traceView=null;diagnosticsView=null;}});
 $('operator-message').addEventListener('input',saveDraft);
 $('close-conversation').onclick = () => { saveDraft(); conversation = null; render(); history.replaceState(null, '', `/?swarm=${encodeURIComponent(state.selected ?? '')}`); };
 $('new-swarm').onclick=()=>$<HTMLDialogElement>('launch').showModal();$('close-launch').onclick=()=>$<HTMLDialogElement>('launch').close();

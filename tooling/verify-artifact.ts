@@ -212,12 +212,15 @@ async function main() {
     checks.issueLogComplete = issues.dropped === 0;
     checks.canonicalUnchanged = sha256(Buffer.from(store.readFile(run.id, file.path).contentBase64, 'base64')) === receipt.canonical.sha256;
     checks.providerLedgerUnchanged = beforeLedger === JSON.stringify(store.reservations(run.id)); checks.modelEvidenceUnchanged = JSON.stringify(beforeEvidence) === JSON.stringify(providerEvents(run.id));
+    const executionChecks = new Set(['runtimeCompleted', 'allAgentsHaveDistinctSessions', 'allAgentsHaveVerifiedModelResponses', 'liabilityWithinCap', 'canonicalUnchanged', 'providerLedgerUnchanged', 'modelEvidenceUnchanged']);
+    const artifactMechanicalChecksPassed = failure === null && Object.entries(checks).filter(([name]) => !executionChecks.has(name)).every(([, passed]) => passed);
     await saveJson('verification.json', { kind, swarmId: run.id, startedAt: new Date(started).toISOString(), elapsedMs: Date.now() - started, providerCallsInitiated: 0,
+      artifactMechanicalChecksPassed,
       checks, mechanicalChecksPassed: failure === null && Object.values(checks).every(Boolean), failure, captures, measurements, browserIssues: issues.entries, droppedBrowserIssues: issues.dropped,
       thresholds: { nonBlankLuminanceStdDev: .5, temporalMeanLuminanceDifference: .02, changedPixelDifference: 2, metricSampleWidth: 160, metricSampleHeight: 90, maximumSamplingDeadlineLatenessMs: 500 },
       manualReviewRequired: kind === 'svg' ? ['Pelican anatomy, riding contact points, bicycle geometry and composition.', 'Two independent measured signoffs on this canonical SHA256.'] : ['Compare visual structure and motion against independently captured reference.', 'Assess resizing composition, particle quality and sustained motion manually.'] });
     if (failure || !Object.values(checks).every(Boolean)) process.exitCode = 1;
-    console.log(JSON.stringify({ directory, swarmId: run.id, sha256: receipt.canonical.sha256, mechanicalChecksPassed: failure === null && Object.values(checks).every(Boolean), manualReviewRequired: true, providerCallsInitiated: 0 }));
+    console.log(JSON.stringify({ directory, swarmId: run.id, sha256: receipt.canonical.sha256, artifactMechanicalChecksPassed, mechanicalChecksPassed: failure === null && Object.values(checks).every(Boolean), manualReviewRequired: true, providerCallsInitiated: 0 }));
   }
 }
 try { await main(); } finally { store.close(); }
