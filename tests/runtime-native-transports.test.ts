@@ -38,25 +38,42 @@ function codexEvents(model = codex.id, usage: unknown = { input_tokens: 20, outp
     { type: 'response.completed', response: { id: 'fixture-response', model, status: 'completed', service_tier: 'default', output: [message], usage } },
   ];
 }
+function splitAnthropicBetaHeader(payload: unknown): { body: unknown; betaHeader?: string } {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { body: payload };
+  const entries = Object.entries(payload);
+  const betaEntry = entries.find(([key]) => key === 'betas');
+  if (!betaEntry) return { body: payload };
+  const betaFeatures = betaEntry[1];
+  if (!Array.isArray(betaFeatures) || !betaFeatures.every(feature => typeof feature === 'string')) {
+    throw new Error('Anthropic beta features must be a string array.');
+  }
+  return {
+    body: Object.fromEntries(entries.filter(([key]) => key !== 'betas')),
+    betaHeader: betaFeatures.join(','),
+  };
+}
 function fixture(binding: ModelBinding, events: unknown[], status = 200, transport: { response?: () => Response; idleTimeoutMs?: number; signal?: AbortSignal; context?: Context } = {}) {
   const store = openSwarmStore(':memory:'); stores.push(store); store.registerWorker('native-fixture', process.pid);
   const created = store.createSwarm(parseSwarmSpec({ task: 'Synthetic transport only', definitionOfDone: 'No real HTTP', finalOutput: 'fixture.txt', agentCount: 1, budgetMicros: 50_000_000, model: binding })); store.claimNextSwarm('native-fixture');
   const agent = created.agents[0]; if (!agent) throw new Error('Missing fixture agent');
   const actor = { swarmId: created.id, agentId: agent.id }; store.startAgent(actor, crypto.randomUUID());
-  let calls = 0; let actualBody = ''; let authorization = ''; let plannedBody = '';
+  let calls = 0; let actualBody = ''; let authorization = ''; let betaHeader = ''; let plannedPayload: unknown;
   const fakeFetch: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     calls++; expect(store.budget(created.id).reservedMicros).toBe(reservationCeiling(binding, 16000));
     const request = new Request(input, init); authorization = request.headers.get('authorization') ?? '';
+    betaHeader = request.headers.get('anthropic-beta') ?? '';
     const body = Buffer.from(await request.arrayBuffer());
     actualBody = (request.headers.get('content-encoding') === 'zstd' ? zstdDecompressSync(body) : body).toString();
-    expect(JSON.parse(actualBody)).toEqual(JSON.parse(plannedBody));
+    const planned = binding.provider === 'anthropic' ? splitAnthropicBetaHeader(plannedPayload) : { body: plannedPayload };
+    expect(JSON.parse(actualBody)).toEqual(planned.body);
+    expect(betaHeader).toBe(planned.betaHeader ?? '');
     if (transport.response) return transport.response();
     return new Response(status === 200 ? sse(events) : JSON.stringify({ error: { message: 'Synthetic retryable failure', type: 'overloaded_error' } }), { status, headers: { 'content-type': status === 200 ? 'text/event-stream' : 'application/json' } });
   }, { preconnect: () => { throw new Error('No real networking is permitted'); } });
   const evidence = new ResponseEvidence(binding, { idleTimeoutMs: transport.idleTimeoutMs });
   const liability = new RequestLiability({ store, actor, admission: new BudgetAdmission(store), ceiling: reservationCeiling(binding, 16000), evidence: PRICING_EVIDENCE, signal: transport.signal ?? new AbortController().signal, fetch: evidence.wrapFetch(fakeFetch) });
   const options: SimpleStreamOptions = { signal: transport.signal, apiKey: binding.provider === 'anthropic' ? 'sk-ant-oat01-fixture-not-a-real-credential' : `fixture.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'synthetic-account' } })).toString('base64')}.fixture`, reasoning: 'high', maxTokens: 16000, cacheRetention: 'none', transport: 'sse', maxRetries: 0, timeoutMs: 3000, fetch: liability.fetch,
-    onPayload: async payload => { validatePayload(binding, 16000, payload); plannedBody = JSON.stringify(payload); await liability.prepare(); },
+    onPayload: async payload => { validatePayload(binding, 16000, payload); plannedPayload = payload; await liability.prepare(); },
   };
   const run = async () => {
     const requestContext = transport.context ?? context;
@@ -64,7 +81,7 @@ function fixture(binding: ModelBinding, events: unknown[], status = 200, transpo
     for await (const _event of stream) { /* Consume actual Pi transport events. */ }
     return stream.result();
   };
-  return { run, store, created, evidence, liability, calls: () => calls, actualBody: () => actualBody, authorization: () => authorization };
+  return { run, store, created, evidence, liability, calls: () => calls, actualBody: () => actualBody, authorization: () => authorization, betaHeader: () => betaHeader };
 }
 
 const imageToolContext: Context = { ...context, messages: [
@@ -103,6 +120,7 @@ describe('actual pinned Pi provider transports through intercepted HTTP', () => 
     const payload = JSON.parse(check.actualBody());
     expect(payload.system[0].text).toContain('Claude Code'); expect(check.actualBody()).not.toContain('cache_control');
     expect(payload.thinking.type).toBe('adaptive'); expect(payload.output_config.effort).toBe('high'); expect(payload.max_tokens).toBe(16000);
+    expect(check.betaHeader()).toBe('claude-code-20250219,oauth-2025-04-20');
     expect(check.authorization()).toBe('Bearer sk-ant-oat01-fixture-not-a-real-credential');
     const verified = check.evidence.verify(message.usage); expect(verified.responseModel).toBe(opus.id);
     check.liability.settle(priceUsage(opus, verified.usage), verified.usage); expect(check.store.budget(check.created.id).settledMicros).toBe(150);
