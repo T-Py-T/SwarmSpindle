@@ -34,7 +34,7 @@ function streamError(event: Record<string, unknown>): RuntimeError {
   return new ProviderDiagnosticError('provider_sse_error', `Provider SSE error (${safeType}); reserved liability was retained.`, undefined, safeType);
 }
 
-/** Observes the server's SSE fields because Pi 0.84.1 preserves the requested model in message.model. */
+/** Independently observes provider SSE before verified usage can settle reserved budget. */
 export class ResponseEvidence {
   private pending = '';
   private eventLines: string[] = [];
