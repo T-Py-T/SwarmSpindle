@@ -1,5 +1,7 @@
 # SwarmSpindle
 
+[![CI](https://github.com/T-Py-T/SwarmSpindle/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/T-Py-T/SwarmSpindle/actions/workflows/ci.yml)
+
 I wanted a single pane of glass for a swarm: give agents a task, watch them figure out how to work together, and inspect what they actually produce.
 
 [IndyDevDan’s demo](https://www.youtube.com/watch?v=S2sjyokoxeE) got me building. This is my independent experiment on [Pi](https://github.com/earendil-works/pi). The part I’m excited about is the conversation: who takes ownership, who challenges a weak result, and where collaboration turns into expensive chatter.
