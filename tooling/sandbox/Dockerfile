@@ -1,4 +1,4 @@
-FROM node:22.14.0-bookworm-slim
+FROM node:26.9.0-bookworm-slim
 
 LABEL io.simpleswarm.sandbox-protocol="1"
 
