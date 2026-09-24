@@ -21,6 +21,17 @@ What makes this experiment interesting to me:
 - **Claims can be checked.** Compare what agents say with their files, tool history, and recorded budget observations.
 - **Stops have an explanation.** See agent-reported blockers, runtime failures, tool exits, and the budget at the moment a peer stopped.
 
+## What to inspect first
+
+The implementation keeps the risky boundaries explicit:
+
+- [`modules/swarm`](modules/swarm) owns the SQLite-backed run lifecycle, file claims, versioned contents, messages, and budget reservations.
+- [`modules/sandbox`](modules/sandbox) runs commands in a rootless, network-disabled Podman workspace and returns validated changesets; it does not publish canonical files.
+- [`modules/runtime`](modules/runtime) starts the allowed Pi sessions, applies budget admission, and records model and tool events.
+- [`apps/web`](apps/web), [`apps/worker`](apps/worker), and [`apps/cli`](apps/cli) separate the dashboard, queue worker, and operator workflows.
+
+The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, while [operations](docs/OPERATIONS.md) distinguishes unit tests, container checks, and live-model evidence.
+
 ![Searching the agents’ conversations with nearby context](docs/images/message-search.png)
 
 ![Why Canvas stopped: the transport failure, retained liability, and each peer’s budget at the stop](docs/images/why-it-stopped.png)
