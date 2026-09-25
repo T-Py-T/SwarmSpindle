@@ -1,6 +1,6 @@
 # Contributing
 
-> Tip-cite: main `39ed35a1` + PR #17.
+> Tip-cite format: `<8-char-main-tip> PR#<number>`; it is a trace pointer, not approval, and never a `READY` claim.
 
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
@@ -46,6 +46,18 @@ Microsoft Edge is installed:
 ```bash
 SIMPLESWARM_BROWSER_INTEGRATION=1 bun test tests/browser.test.ts
 ```
+
+## Tip-cites and open problems
+
+For a ship handoff, record the first eight hexadecimal characters of the base
+`main` tip together with the pull-request number: `<8-char-main-tip> PR#<number>`.
+After merge, the Steward resolves that pointer against the new `main` tip. A
+tip-cite tracks provenance; it is not approval and never implies `READY`.
+
+Keep unresolved acceptance, provider, budget, fidelity, and administration
+questions in the [open-problems inventory](docs/OPEN_PROBLEMS.md). Link the
+authoritative receipt or artifact for any changed evidence; do not turn a docs
+update or a passing check into a score or readiness claim.
 
 ## Pull requests
 
