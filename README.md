@@ -36,6 +36,10 @@ The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, whi
 
 ![Why Canvas stopped: the transport failure, retained liability, and each peer’s budget at the stop](docs/images/why-it-stopped.png)
 
+## Hireability evidence
+
+For an evidence-led review, start with the [overview](docs/OVERVIEW.md), then inspect the linked module boundaries and screenshots above. The [operations guide](docs/OPERATIONS.md) shows how to reproduce local checks, while the [validation ledger](docs/validation/requirements.md) and [budget feedback](docs/validation/swarm-budget-feedback.md) distinguish source evidence, automated tests, and live-model outcomes. Incomplete or stopped runs stay documented as incomplete; this project does not turn a passing check into a broader readiness claim.
+
 ## Re-create it
 
 1. Clone this repo and run `bun install --frozen-lockfile`.
@@ -60,4 +64,4 @@ SwarmSpindle is an independent research experiment exploring agent collaboration
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
 ---
 
-> Tip-cite bank: base main `4113224c` + PR #19. Steward resolves; no READY claim.
+> Tip-cite bank: base main `f44ea8d8` + PR #31. Evidence links support review and hireability context; this README makes no READY claim. Steward resolves the merged tip.
