@@ -47,7 +47,7 @@ Defaults are **two agents, a $0.25 working target, and a $6 hard ceiling**. Requ
 
 ## Keep exploring
 
-[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
+[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Open problems](docs/OPEN_PROBLEMS.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
 
 Neither original 30-agent challenge met its definition of done. The [challenge results](docs/validation/acceptance.md) record what happened; the [video requirements](docs/research/video-requirements.md) separate demonstrated behavior from reconstruction decisions.
 
@@ -60,4 +60,4 @@ SwarmSpindle is an independent research experiment exploring agent collaboration
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
 ---
 
-> Tip-cite: main `318e8ec2` + PR #18. Steward resolves; no READY claim.
+> Tip-cite bank: base main `4113224c` + PR #19. Steward resolves; no READY claim.
