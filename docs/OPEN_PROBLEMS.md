@@ -55,6 +55,6 @@ For ship handoffs, a tip-cite is a trace pointer in the form **at least eight he
 
 For Ship 136, the handoff starts from fetched main tip `abef6bc6`; the PR number is filled in only after GitHub assigns it:
 
-> Tip-cite bank: base main `abef6bc6` + PR #N. Steward resolves; no `READY` claim.
+> Tip-cite bank: base main `abef6bc6` + PR #33. Steward resolves; no `READY` claim.
 
 Do not replace an unresolved item with a tip-cite. Keep the cite factual, resolvable, and separate from readiness language.
