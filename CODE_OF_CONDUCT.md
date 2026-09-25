@@ -1,6 +1,6 @@
 # Code of Conduct
 
-> Tip-cite: `a1aa2e7d PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+> Tip-cite: `a1aa2e7d PR#29`; this is a provenance pointer only, not approval, and never a `READY` claim.
 
 ## Our standard
 
