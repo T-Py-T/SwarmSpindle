@@ -1,6 +1,6 @@
 # Adopted runtime and public contracts
 
-> Tip-cite: `36070517 PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+> Tip-cite: `3502e1aa PR#25`; this is a provenance pointer only, not approval, and never a `READY` claim.
 
 Candidate A from `research/runtime-candidates.md` is selected: separate trusted web and Pi worker processes on the Mac, with all model-controlled shell operations inside a network-disabled, nonprivileged local Podman container. Pi does not discover personal tools, skills, prompts, AGENTS files, or extensions. Only explicit swarm tools are available. The model transport uses native Pi authentication; commands receive neither credentials nor host filesystem access.
 
