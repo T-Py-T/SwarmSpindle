@@ -1,5 +1,7 @@
 # Adopted runtime and public contracts
 
+> Tip-cite: `36070517 PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+
 Candidate A from `research/runtime-candidates.md` is selected: separate trusted web and Pi worker processes on the Mac, with all model-controlled shell operations inside a network-disabled, nonprivileged local Podman container. Pi does not discover personal tools, skills, prompts, AGENTS files, or extensions. Only explicit swarm tools are available. The model transport uses native Pi authentication; commands receive neither credentials nor host filesystem access.
 
 The web process queues runs and reads state through `@simpleswarm/swarm`. The worker independently claims queued runs, registers its identity and heartbeat, starts the requested number of actual Pi sessions, and records their events. SQLite provides the shared durable transaction boundary. No browser connection is required for the worker to continue.
@@ -28,3 +30,7 @@ The user's requested feature testing is exercised at the public swarm module, th
 ## Initial scope of implementation packets
 
 Core, sandbox, and Pi runtime are independent writers in isolated worktrees using the contracts in `modules/*/contracts.ts`. The coordinator owns web/CLI composition and integration. API changes must be proposed to the coordinator before altering shared contracts. All work remains unpublished until independent review and appropriate validation pass.
+
+---
+
+> **Honesty footer:** These notes describe intended architecture, ownership, and boundary decisions. They are not proof that every path is implemented, tested, secure, portable, or accepted; they are not an approval, release certification, score, or `READY` claim.
