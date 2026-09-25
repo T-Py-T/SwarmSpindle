@@ -1,6 +1,6 @@
 # Contributing
 
-> Tip-cite: `3ecf820d PR#<number>`; this docs-only refresh is a trace pointer, not approval, and never a `READY` claim.
+> Tip-cite: `c438aa3c PR#27`; this docs-only refresh is a trace pointer, not approval, and never a `READY` claim.
 
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
