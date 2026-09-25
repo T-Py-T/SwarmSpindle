@@ -1,5 +1,11 @@
 # Security policy
 
+> Tip-cite: `db74f4a8 PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+
+## Readiness boundary
+
+This policy is documentation, not a score, approval, or release certification. Nothing here claims `READY`; local checks and vulnerability reports must not be interpreted as a readiness decision.
+
 ## Supported code
 
 The current `main` branch is the only supported version. SwarmSpindle is a local Bun and Pi swarm workspace; it does not operate a hosted service.
