@@ -1,5 +1,7 @@
 # Contributing
 
+> Tip-cite: main `39ed35a1` + PR #17.
+
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
 boundaries, reproducible checks, and evidence for claimed behavior.
