@@ -1,6 +1,6 @@
 # Support
 
-> Tip-cite: `58f1f473 PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+> Tip-cite: `4883fa3e PR#24`; this is a provenance pointer only, not approval, and never a `READY` claim.
 
 ## Support boundary
 
