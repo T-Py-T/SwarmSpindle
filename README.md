@@ -58,3 +58,6 @@ The newer two-peer Claude test completed Pelican with a reviewed artifact at $6.
 SwarmSpindle is an independent research experiment exploring agent collaboration and attempting to achieve the results demonstrated in [IndyDevDan’s video](https://www.youtube.com/watch?v=S2sjyokoxeE). It is not affiliated with, sponsored by, endorsed by, or an official product of IndyDevDan or his associated entities. References are solely for identification and attribution. Similarities in functionality or presentation do not imply common authorship, affiliation, or endorsement.
 
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
+---
+
+> Tip-cite: main `318e8ec2` + PR #18. Steward resolves; no READY claim.
