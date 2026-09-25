@@ -60,4 +60,4 @@ SwarmSpindle is an independent research experiment exploring agent collaboration
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
 ---
 
-> Tip-cite: main `318e8ec2` + PR #18. Steward resolves; no READY claim.
+> Tip-cite bank: base main `4113224c` + PR #19. Steward resolves; no READY claim.
