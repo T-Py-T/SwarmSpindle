@@ -1,6 +1,6 @@
 # Security policy
 
-> Tip-cite: `db74f4a8 PR#<number>`; this is a provenance pointer only, not approval, and never a `READY` claim.
+> Tip-cite: `db74f4a8 PR#23`; this is a provenance pointer only, not approval, and never a `READY` claim.
 
 ## Readiness boundary
 
