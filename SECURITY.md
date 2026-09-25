@@ -1,10 +1,10 @@
 # Security policy
 
-> Tip-cite: `db74f4a8 PR#23`; this is a provenance pointer only, not approval, and never a `READY` claim.
+> Tip-cite: `c0472986 PR#30`; this is a provenance pointer only, not approval, and never a `READY` claim.
 
 ## Readiness boundary
 
-This policy is documentation, not a score, approval, or release certification. Nothing here claims `READY`; local checks and vulnerability reports must not be interpreted as a readiness decision.
+This policy is documentation, not a score, approval, or release certification. Nothing here claims `READY`; a vulnerability report, remediation, or local check is not a security approval and does not make this project or any artifact `READY`.
 
 ## Supported code
 
