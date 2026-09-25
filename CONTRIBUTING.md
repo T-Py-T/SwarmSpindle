@@ -1,6 +1,6 @@
 # Contributing
 
-> Tip-cite format: `<8-char-main-tip> PR#<number>`; it is a trace pointer, not approval, and never a `READY` claim.
+> Tip-cite: `3ecf820d PR#<number>`; this docs-only refresh is a trace pointer, not approval, and never a `READY` claim.
 
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
@@ -49,8 +49,10 @@ SIMPLESWARM_BROWSER_INTEGRATION=1 bun test tests/browser.test.ts
 
 ## Tip-cites and open problems
 
-For a ship handoff, record the first eight hexadecimal characters of the base
-`main` tip together with the pull-request number: `<8-char-main-tip> PR#<number>`.
+For every ship handoff, including a docs-only refresh, record the first eight
+hexadecimal characters of the base `main` tip together with the pull-request
+number: `<8-char-main-tip> PR#<number>`. A documentation update alone does not
+establish acceptance or readiness.
 After merge, the Steward resolves that pointer against the new `main` tip. A
 tip-cite tracks provenance; it is not approval and never implies `READY`.
 
