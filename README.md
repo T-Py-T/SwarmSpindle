@@ -38,7 +38,7 @@ The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, whi
 
 ## Hireability evidence
 
-For an evidence-led review, start with the [overview](docs/OVERVIEW.md), then inspect the linked module boundaries and screenshots above. The [operations guide](docs/OPERATIONS.md) shows how to reproduce local checks, while the [validation ledger](docs/validation/requirements.md) and [budget feedback](docs/validation/swarm-budget-feedback.md) distinguish source evidence, automated tests, and live-model outcomes. Incomplete or stopped runs stay documented as incomplete; this project does not turn a passing check into a broader readiness claim.
+For an evidence-led review, start with the [overview](docs/OVERVIEW.md), then inspect the linked module boundaries and screenshots above. The [design overview](docs/DESIGN.md) records planning boundaries and held decisions without restating architecture. The [operations guide](docs/OPERATIONS.md) shows how to reproduce local checks, while the [validation ledger](docs/validation/requirements.md) and [budget feedback](docs/validation/swarm-budget-feedback.md) distinguish source evidence, automated tests, and live-model outcomes. Incomplete or stopped runs stay documented as incomplete; this project does not turn a passing check into a broader readiness claim.
 
 ## Re-create it
 
@@ -51,7 +51,7 @@ Defaults are **two agents, a $0.25 working target, and a $6 hard ceiling**. Requ
 
 ## Keep exploring
 
-[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Open problems](docs/OPEN_PROBLEMS.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
+[Read the overview](docs/OVERVIEW.md) · [Design notes](docs/DESIGN.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Open problems](docs/OPEN_PROBLEMS.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
 
 Neither original 30-agent challenge met its definition of done. The [challenge results](docs/validation/acceptance.md) record what happened; the [video requirements](docs/research/video-requirements.md) separate demonstrated behavior from reconstruction decisions.
 
