@@ -1,6 +1,6 @@
 # Contributing
 
-> Tip-cite: `c438aa3c PR#27`; this docs-only refresh is a trace pointer, not approval, and never a `READY` claim.
+> **Tip-cite bank:** base main `4e54343a` + ship 235 (SECURITY/CONTRIBUTING lean). Resolve to `<8-char-merge-tip> PR#<number>` after merge. Provenance pointer only; never `READY`.
 
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
@@ -16,6 +16,8 @@ boundaries, reproducible checks, and evidence for claimed behavior.
   evidence, generated bundles, or editor settings.
 - Keep task prompts, references, and exported artifacts free of private or
   third-party material that you do not have permission to publish.
+- Report security vulnerabilities through [SECURITY.md](SECURITY.md); do not
+  open a public issue for an unpatched vulnerability.
 
 ## Local setup and validation
 
