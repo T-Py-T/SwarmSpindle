@@ -36,9 +36,13 @@ The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, whi
 
 ![Why Canvas stopped: the transport failure, retained liability, and each peer’s budget at the stop](docs/images/why-it-stopped.png)
 
-## Hireability evidence
+## Stack
 
-For an evidence-led review, start with the [overview](docs/OVERVIEW.md), then inspect the linked module boundaries and screenshots above. The [design overview](docs/DESIGN.md) records planning boundaries and held decisions without restating architecture. The [operations guide](docs/OPERATIONS.md) shows how to reproduce local checks, while the [validation ledger](docs/validation/requirements.md) and [budget feedback](docs/validation/swarm-budget-feedback.md) distinguish source evidence, automated tests, and live-model outcomes. Incomplete or stopped runs stay documented as incomplete; this project does not turn a passing check into a broader readiness claim.
+**Bun** and **TypeScript** monorepo · [**Pi**](https://github.com/earendil-works/pi) agents · **Podman** sandbox · **SQLite** swarm state · local dashboard (`bun run web` + `bun run worker`).
+
+## For reviewers
+
+Evidence-led paths (overview, validation, design boundaries) live in **[docs/HIREABILITY.md](docs/HIREABILITY.md)**. No readiness or score claims here. Code is **[MIT](LICENSE)**; see [NOTICE](NOTICE.md) for attribution.
 
 ## Re-create it
 
@@ -64,4 +68,4 @@ SwarmSpindle is an independent research experiment exploring agent collaboration
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
 ---
 
-> Tip-cite bank: base main `f44ea8d8` + PR #31. Evidence links support review and hireability context; this README makes no READY claim. Steward resolves the merged tip.
+> Tip-cite bank: base main `f44ea8d8` + ship 231 (hireability lean). Evidence links support review context; this README makes no READY claim. Steward resolves the merged tip.
