@@ -36,6 +36,14 @@ The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, whi
 
 ![Why Canvas stopped: the transport failure, retained liability, and each peer’s budget at the stop](docs/images/why-it-stopped.png)
 
+## Stack
+
+**Bun** and **TypeScript** monorepo · [**Pi**](https://github.com/earendil-works/pi) agents · **Podman** sandbox · **SQLite** swarm state · local dashboard (`bun run web` + `bun run worker`).
+
+## For reviewers
+
+No readiness or score claims here. Code is **[MIT](LICENSE)**; see [NOTICE](NOTICE.md) for attribution.
+
 ## Re-create it
 
 1. Clone this repo and run `bun install --frozen-lockfile`.
@@ -47,7 +55,7 @@ Defaults are **two agents, a $0.25 working target, and a $6 hard ceiling**. Requ
 
 ## Keep exploring
 
-[Read the overview](docs/OVERVIEW.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
+[Documentation index](docs/README.md) · [Authors](AUTHORS.md) · [Maintainers](MAINTAINERS.md) · [Notice and attribution](NOTICE.md) · [Read the overview](docs/OVERVIEW.md) · [Design notes](docs/DESIGN.md) · [Setup and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Open problems](docs/OPEN_PROBLEMS.md) · [Run the tests](docs/OPERATIONS.md#verify-changes-and-troubleshoot) · [Latest validation results](docs/validation/swarm-budget-feedback.md)
 
 Neither original 30-agent challenge met its definition of done. The [challenge results](docs/validation/acceptance.md) record what happened; the [video requirements](docs/research/video-requirements.md) separate demonstrated behavior from reconstruction decisions.
 
@@ -58,3 +66,5 @@ The newer two-peer Claude test completed Pelican with a reviewed artifact at $6.
 SwarmSpindle is an independent research experiment exploring agent collaboration and attempting to achieve the results demonstrated in [IndyDevDan’s video](https://www.youtube.com/watch?v=S2sjyokoxeE). It is not affiliated with, sponsored by, endorsed by, or an official product of IndyDevDan or his associated entities. References are solely for identification and attribution. Similarities in functionality or presentation do not imply common authorship, affiliation, or endorsement.
 
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
+---
+

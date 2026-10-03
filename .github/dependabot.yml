@@ -1,3 +1,8 @@
+# Tip-cite bank: base main `36604526` + this PR pending Steward.
+# Resolve to `<8-char-merge-tip> PR#<number>` after merge. Provenance pointer only; never `READY`.
+# Wayfinder: https://github.com/T-Py-T/SwarmSpindle/issues/44
+# Dependabot schedules supply-chain hygiene only; not approval, release certification, or `READY`.
+# Reversible: remove these comment lines without changing the updates below.
 version: 2
 updates:
   - package-ecosystem: github-actions

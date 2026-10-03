@@ -1,0 +1,7 @@
+# Tip-cite bank: base main `9a0c3bf6` / #51 + this PR pending Steward.
+# Resolve to `<8-char-merge-tip> PR#<number>` after merge. Provenance pointer only; never `READY`.
+# Wayfinder: https://github.com/T-Py-T/SwarmSpindle/issues/44
+# CODEOWNERS routes review requests only; not approval, release certification, or `READY`.
+# Reversible: remove this file to drop default review routing without changing other governance docs.
+
+* @T-Py-T
