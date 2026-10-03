@@ -4,7 +4,7 @@ import {
   createAgentSession, createExtensionRuntime, ModelRuntime, SessionManager, SettingsManager,
   type AgentSession, type ResourceLoader,
 } from '@earendil-works/pi-coding-agent';
-import { createAssistantMessageEventStream, type Api, type AssistantMessage, type Model } from '@earendil-works/pi-ai';
+import { createAssistantMessageEventStream, getCurrentSystemPrompt, getCurrentTools, normalizeContext, type Api, type AssistantMessage, type Model } from '@earendil-works/pi-ai';
 import type { Actor, SwarmRecord, TokenUsage } from '@simpleswarm/swarm';
 import type { ModelReadiness, RuntimeOptions, SwarmRuntime } from './contracts.ts';
 import { BudgetAdmission, RequestLiability } from './budget.ts';
@@ -129,7 +129,21 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
           const snapshot = budgetAwareness(store.getSwarm(run.id), peer.actor, {
             reservedMicros: reservationCeiling(run.spec.model, run.spec.maxOutputTokens), turn: peer.turns,
           });
-          const budgetContext = { ...context, systemPrompt: `${context.systemPrompt ?? ''}\n\nCURRENT BUDGET SNAPSHOT (runtime-owned; refresh with budget before decisions):\n${JSON.stringify(snapshot)}` };
+          // pi-ai 0.86+ folds Context.systemPrompt into transcript system messages. Anthropic models with
+          // mid-convo system support only put the *leading* system text into payload.system, so inject the
+          // budget snapshot into that leading prompt rather than as a later system message.
+          const priorMessages = Array.isArray(context.messages) ? context.messages : [];
+          const basePrompt = typeof context.systemPrompt === 'string' && context.systemPrompt.length > 0
+            ? context.systemPrompt
+            : getCurrentSystemPrompt(priorMessages);
+          const tools = Array.isArray(context.tools) && context.tools.length > 0
+            ? context.tools
+            : getCurrentTools(priorMessages);
+          const budgetContext = normalizeContext({
+            systemPrompt: `${basePrompt}\n\nCURRENT BUDGET SNAPSHOT (runtime-owned; refresh with budget before decisions):\n${JSON.stringify(snapshot)}`,
+            tools: tools.length > 0 ? tools : undefined,
+            messages: priorMessages.filter((message: { role: string }) => message.role !== 'system'),
+          });
           const stream = models.streamSimple(model, budgetContext, {
             signal: requestSignal, sessionId: peer.session.sessionId, reasoning: 'high',
             maxTokens: run.spec.maxOutputTokens, cacheRetention: 'none', transport: 'sse', maxRetries: 0,
