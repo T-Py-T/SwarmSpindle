@@ -42,7 +42,7 @@ The [architecture notes](docs/ARCHITECTURE.md) describe the ownership rules, whi
 
 ## For reviewers
 
-Evidence-led paths (overview, validation, design boundaries) live in **[docs/HIREABILITY.md](docs/HIREABILITY.md)**. No readiness or score claims here. Code is **[MIT](LICENSE)**; see [NOTICE](NOTICE.md) for attribution.
+No readiness or score claims here. Code is **[MIT](LICENSE)**; see [NOTICE](NOTICE.md) for attribution.
 
 ## Re-create it
 
@@ -68,4 +68,3 @@ SwarmSpindle is an independent research experiment exploring agent collaboration
 No ownership of third-party intellectual property is claimed. All third-party rights remain with their respective holders. The [MIT license](LICENSE) applies to project-authored code; it does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
 ---
 
-> Tip-cite bank: base main `f44ea8d8` + ship 231 (hireability lean). Evidence links support review context; this README makes no READY claim. Steward resolves the merged tip.
