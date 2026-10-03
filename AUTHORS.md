@@ -1,6 +1,6 @@
 # Authors
 
-> **Status:** hireability attribution surface. This page is not an acceptance gate, scorecard, release declaration, or `READY` signal.
+> **Status:** attribution surface. This page is not an acceptance gate, scorecard, release declaration, or `READY` signal.
 >
 
 SwarmSpindle identifies who maintains the project and where to find contribution provenance. It does not rank participants, certify acceptance, or turn documentation into readiness language.

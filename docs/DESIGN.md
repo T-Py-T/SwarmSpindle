@@ -8,7 +8,7 @@ SwarmSpindle documents planning choices, held boundaries, and the evidence that 
 
 ## What this page is
 
-- A planning and decision overview for reviewers, contributors, and hireability context.
+- A planning and decision overview for reviewers, contributors, and context.
 - A map from design questions to authoritative receipts, tasks, and validation records.
 - An honesty boundary: documentation records intent and evidence; it does not certify acceptance.
 
@@ -83,4 +83,4 @@ Do not replace an unresolved item with a tip-cite. Keep the cite factual, resolv
 
 ---
 
-> **Honesty footer:** This design overview is a planning and decision record for hireability and contributor context. It makes no release certification, acceptance, score, or `READY` claim.
+> **Honesty footer:** This design overview is a planning and decision record for contributor context. It makes no release certification, acceptance, score, or `READY` claim.
