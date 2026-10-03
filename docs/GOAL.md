@@ -53,7 +53,7 @@ Public repository creation/publishing is requested. Upstream repositories remain
 - [ ] Run 30 actual Opus 4.8 High agents on recovered pelican criteria under $50; retain identity/count/cost/trace evidence and render/review the SVG artifact.
 - [ ] Subsequently run 30 actual GPT-5.5 High agents on recovered canvas-from-video criteria under a separate $50; retain identity/count/cost/trace evidence, real canvas DOM, temporal captures, and reference comparison.
 - [ ] Complete independent fixed-artifact review, security/budget review, relevant tests/type checks/build, installation check, licensing/provenance, public publishing and clean handoff.
-- [ ] Capture research in LearningVault/4-Research/Codex/Simple Swarm System via native Obsidian CLI.
+- [ ] Capture research via native Obsidian CLI.
 
 A successful test at one seam never proves unrelated requirements. Do not delete, skip, weaken, or narrow tests to satisfy this contract. Any unavailable required model or absent authentication remains an open requirement while independent implementation proceeds.
 

@@ -1,0 +1,9 @@
+# Tip-cite: base main `a1ab8f22`; resolve to `<8-char-merge-tip> PR#<number>` after merge. Provenance pointer only; never a READY claim.
+cff-version: 1.2.0
+title: SwarmSpindle
+type: software
+authors:
+  - name: T_Py_T
+    email: tnt850910@aol.com
+repository-code: https://github.com/T-Py-T/SwarmSpindle
+license: MIT
