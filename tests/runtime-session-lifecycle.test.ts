@@ -53,7 +53,7 @@ test('real Pi ignores hostile local instructions and extensions while keeping on
     expect(JSON.stringify(payload)).not.toContain('HOSTILE_');
     expect(JSON.stringify(payload.system)).toContain(current.run.spec.task);
     expect(JSON.stringify(payload.system)).toContain(current.run.spec.definitionOfDone);
-    const names = payload.tools.map((tool: { name: string }) => tool.name).sort();
+    const names = payload.tools.map((tool: { name: string }) => tool.name).filter((name: string) => name !== '__pi_deferred_placeholder__').sort();
     expect(names).toEqual(['read','list_files','write','edit','bash','post','inbox','list_threads','create_thread','join_thread','list_team','name','budget','claim_file','release_file','file_history','file_diff','file_restore','done'].sort());
     return toolResponse();
   }, { preconnect: () => { throw new Error('No network permitted'); } });

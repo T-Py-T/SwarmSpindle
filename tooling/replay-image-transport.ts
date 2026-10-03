@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { zstdDecompressSync } from 'node:zlib';
 import { streamSimple } from '@earendil-works/pi-ai/api/openai-codex-responses';
 import { getBuiltinModel } from '@earendil-works/pi-ai/providers/all';
-import type { Context, Message } from '@earendil-works/pi-ai';
+import { normalizeContext, type Context, type Message } from '@earendil-works/pi-ai';
 import { openSwarmStore, parseSwarmSpec, type ModelBinding, type SwarmRecord } from '@simpleswarm/swarm';
 import { BudgetAdmission, RequestLiability } from '../modules/runtime/budget.ts';
 import { ResponseEvidence } from '../modules/runtime/response-evidence.ts';
@@ -157,7 +157,7 @@ async function main() {
         }, { preconnect: () => { throw new Error('preconnect_forbidden'); } });
         const liability = new RequestLiability({ store, actor, admission: new BudgetAdmission(store), ceiling: reservationCeiling(model, 16000), evidence: PRICING_EVIDENCE, signal, fetch: evidence.wrapFetch(mappedFetch) });
         const apiKey = `fixture.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'synthetic-no-account' } })).toString('base64')}.fixture`;
-        const stream = streamSimple(getBuiltinModel('openai-codex', 'gpt-5.5'), context, { apiKey, signal, reasoning: 'high', maxTokens: 16000, cacheRetention: 'none', transport: 'sse', maxRetries: 0, timeoutMs: 3000, fetch: liability.fetch,
+        const stream = streamSimple(getBuiltinModel('openai-codex', 'gpt-5.5'), normalizeContext(context), { apiKey, signal, reasoning: 'high', maxTokens: 16000, cacheRetention: 'none', transport: 'sse', maxRetries: 0, timeoutMs: 3000, fetch: liability.fetch,
           onPayload: async payload => { validatePayload(model, 16000, payload); expectedBodyHash = hash(JSON.stringify(payload)); await liability.prepare(); },
         });
         for await (const _event of stream) { /* No model output or private context is logged. */ }

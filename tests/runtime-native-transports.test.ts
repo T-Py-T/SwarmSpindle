@@ -4,7 +4,7 @@ import { Type } from 'typebox';
 import { streamSimple as streamAnthropic } from '@earendil-works/pi-ai/api/anthropic-messages';
 import { streamSimple as streamCodex } from '@earendil-works/pi-ai/api/openai-codex-responses';
 import { getBuiltinModel } from '@earendil-works/pi-ai/providers/all';
-import type { Context, SimpleStreamOptions } from '@earendil-works/pi-ai';
+import { normalizeContext, type Context, type SimpleStreamOptions } from '@earendil-works/pi-ai';
 import { openSwarmStore, parseSwarmSpec, type ModelBinding, type SwarmStore } from '@simpleswarm/swarm';
 import { BudgetAdmission, RequestLiability } from '../modules/runtime/budget.ts';
 import { priceUsage, PRICING_EVIDENCE, reservationCeiling, validatePayload } from '../modules/runtime/pricing.ts';
@@ -77,7 +77,7 @@ function fixture(binding: ModelBinding, events: unknown[], status = 200, transpo
   };
   const run = async () => {
     const requestContext = transport.context ?? context;
-    const stream = binding.provider === 'anthropic' ? streamAnthropic(getBuiltinModel('anthropic', 'claude-opus-4-8'), requestContext, options) : streamCodex(getBuiltinModel('openai-codex', 'gpt-5.5'), requestContext, options);
+    const stream = binding.provider === 'anthropic' ? streamAnthropic(getBuiltinModel('anthropic', 'claude-opus-4-8'), normalizeContext(requestContext), options) : streamCodex(getBuiltinModel('openai-codex', 'gpt-5.5'), normalizeContext(requestContext), options);
     for await (const _event of stream) { /* Consume actual Pi transport events. */ }
     return stream.result();
   };
@@ -120,7 +120,7 @@ describe('actual pinned Pi provider transports through intercepted HTTP', () => 
     const payload = JSON.parse(check.actualBody());
     expect(payload.system[0].text).toContain('Claude Code'); expect(check.actualBody()).not.toContain('cache_control');
     expect(payload.thinking.type).toBe('adaptive'); expect(payload.output_config.effort).toBe('high'); expect(payload.max_tokens).toBe(16000);
-    expect(check.betaHeader()).toBe('claude-code-20250219,oauth-2025-04-20');
+    expect(check.betaHeader()).toBe('claude-code-20250219,oauth-2025-04-20,mid-conversation-tool-changes-2026-07-01');
     expect(check.authorization()).toBe('Bearer sk-ant-oat01-fixture-not-a-real-credential');
     const verified = check.evidence.verify(message.usage); expect(verified.responseModel).toBe(opus.id);
     check.liability.settle(priceUsage(opus, verified.usage), verified.usage); expect(check.store.budget(check.created.id).settledMicros).toBe(150);
