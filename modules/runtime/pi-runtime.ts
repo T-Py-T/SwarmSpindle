@@ -129,16 +129,12 @@ export function createPiRuntime(options: RuntimeOptions, dependencies: PiRuntime
           const snapshot = budgetAwareness(store.getSwarm(run.id), peer.actor, {
             reservedMicros: reservationCeiling(run.spec.model, run.spec.maxOutputTokens), turn: peer.turns,
           });
-          // pi-ai 0.86+ folds Context.systemPrompt into transcript system messages. Anthropic models with
+          // pi-ai 0.86+ TranscriptContext carries prompt/tools in system messages. Anthropic models with
           // mid-convo system support only put the *leading* system text into payload.system, so inject the
           // budget snapshot into that leading prompt rather than as a later system message.
           const priorMessages = Array.isArray(context.messages) ? context.messages : [];
-          const basePrompt = typeof context.systemPrompt === 'string' && context.systemPrompt.length > 0
-            ? context.systemPrompt
-            : getCurrentSystemPrompt(priorMessages);
-          const tools = Array.isArray(context.tools) && context.tools.length > 0
-            ? context.tools
-            : getCurrentTools(priorMessages);
+          const basePrompt = getCurrentSystemPrompt(priorMessages) ?? '';
+          const tools = getCurrentTools(priorMessages);
           const budgetContext = normalizeContext({
             systemPrompt: `${basePrompt}\n\nCURRENT BUDGET SNAPSHOT (runtime-owned; refresh with budget before decisions):\n${JSON.stringify(snapshot)}`,
             tools: tools.length > 0 ? tools : undefined,
