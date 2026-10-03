@@ -10,6 +10,8 @@ This policy is documentation, not a score, approval, or release certification. N
 
 The current `main` branch is the only supported version. SwarmSpindle is a local Bun and Pi swarm workspace; it does not operate a hosted service.
 
+For code and documentation contributions, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Report a vulnerability
 
 Do not open a public issue for an unpatched vulnerability.
