@@ -2,40 +2,62 @@
 
 [![CI](https://github.com/T-Py-T/SwarmSpindle/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/T-Py-T/SwarmSpindle/actions/workflows/ci.yml)
 
-**A local workspace for watching and steering a swarm of AI agents — their conversations, their files, and their spending — on one machine.**
+**Watch a swarm spend, claim files, and stop, on your own Mac, before you believe the transcript.**
 
-SwarmSpindle hands a group of [Pi](https://github.com/earendil-works/pi) agents a single task, a shared workspace, and one spending cap, then shows you everything they do with it: who claimed which file, who challenged whose result, which tool call failed, and exactly how much has been spent, held, or left unresolved. It runs as a local dashboard plus a background worker on your own computer, against your own provider login. There is no hosted version and no server to deploy.
+SwarmSpindle gives a handful of [Pi](https://github.com/earendil-works/pi) agents one task, one shared workspace, and one spending ceiling, then keeps the board, the file claims, and the budget readings in a local dashboard. The worker keeps running if you close the tab. There is no hosted instance.
 
-![SwarmSpindle's workspace overview, listing runs grouped by outcome with their verified spending](docs/images/overview.png)
+![Workspace overview: runs grouped by outcome, with verified spending](docs/images/overview.png)
 
-The overview separates work in progress from completion claims that still need review and runs that stopped without finishing. These are real runs from this project's own experiments; the recorded outcomes are in the [acceptance record](docs/validation/acceptance.md).
+These are existing captures from this project's own experiments, not a live server. The recorded outcomes sit in the [acceptance record](docs/validation/acceptance.md). The test fixture image is not used here.
 
-## Why it exists
+## Why try it
 
-Starting a swarm of agents is easy. Believing one is hard. A swarm can look extremely busy and produce nothing; it can also spend real money on chatter while it does. SwarmSpindle is built so neither of those stays hidden.
+A swarm can look busy and publish nothing, or spend real money on chatter. SwarmSpindle is built so both stay visible.
 
-Every statement an agent posts to the board can be checked against the file revision it actually published, the tool calls it actually made, and the budget readings it actually saw — each reading carries a permanent sequence number, so you can tell a quoted balance from an invented one. Every run that ends has a recorded reason attached to it instead of a guess. And every model request has to fit inside a reservation before it is allowed to go out, so the ceiling is enforced before the spending rather than reported after it.
+- **Claims, not vibes.** A message can be checked against the file revision that was published, the tool calls that were made, and a budget reading that carries a permanent sequence number.
+- **The ceiling is enforced before the request.** The runtime reserves a conservative maximum, then either settles to verified usage or keeps the reservation as unresolved liability and closes the run. Agents cannot talk past that guard.
+- **You can see why it stopped.** The stop view keeps the runtime stop code, the last tool call, unpublished shell work, and each peer's budget at that moment.
+
+![Why a run stopped: per-peer stop code and budget at the stop](docs/images/why-it-stopped.png)
 
 ## What you can do with it
 
-- **Watch one run from one page.** Outcomes, message boards, agent status, tool history, file claims and revisions, artifact previews, and budget records all live in the same local dashboard.
-- **See the work get divided.** Peers coordinate in writing and claim files; nobody edits a file they do not hold. The board is how ownership is negotiated, so it is also the record of who owned what.
-- **Search the conversations.** Literal phrase search runs across full message bodies, scoped to one run or all of them, with surrounding context, permanent links, and JSONL export of the loaded results.
-- **Steer without taking over.** You can post an operator message into a live thread. It does not bypass file ownership or the spending cap.
-- **Find out why it stopped.** A run's stop view collects the runtime stop code, the last tool call, shell work that was never published, and each peer's budget at the moment it stopped.
-- **Keep the agents sandboxed.** Shell commands run in a rootless, network-disabled Podman container and come back as a validated changeset; the container never publishes canonical files itself.
-- **Close the browser.** The worker owns execution, not the dashboard. Restarting the web process or closing the tab does not end a run.
+- **One page per run.** Outcomes, boards, agent status, tool history, file claims, artifact previews, and budget records share the dashboard.
+- **File ownership is the conversation.** Peers claim files in writing. A peer does not edit a file it does not hold.
+- **Search the actual bodies.** Literal phrase search across messages, one run or all of them, with context, permanent links, and a JSONL export of the loaded page.
+- **Steer without taking over.** An operator message lands in the live thread. It does not bypass a claim or the ceiling.
+- **Sandbox the shell.** Commands run in a rootless, network-disabled Podman container and return a validated changeset. The container does not publish canonical files.
+- **Close the browser.** The worker owns execution. Restarting the web process does not end a run.
 
-![Searching agent messages for a phrase, with the surrounding conversation opened beside the results](docs/images/message-search.png)
+![Message search across agent conversations](docs/images/message-search.png)
 
-## Before you start
+![A run's message board beside verified spending and held capacity](docs/images/message-board.png)
 
-- **One Mac.** The setup guide, Podman steps, and host-browser checks are written and validated for a single macOS machine. The dashboard, CLI, and ordinary test suite also start on Linux, but the documented container setup is macOS-specific and the Linux path is unvalidated.
-- **[Bun](https://bun.sh)** for everything, and **[Podman](https://podman.io)** with a rootless connection for the agent sandbox. `just` is optional and only provides recipe shortcuts.
-- **Your own provider login, through Pi.** SwarmSpindle deliberately supports exactly two models at High reasoning: `claude-opus-4-8` through Pi's Anthropic provider, and `gpt-5.5` through Pi's OpenAI Codex provider. It will not substitute a different model if one is unavailable. This repository cannot supply credentials; you authenticate with an account you already have.
-- **Real money.** Runs send paid model requests billed to your own account. The budget controls below bound what a run can start, not what your provider decides to charge.
+## Honest demo
+
+**macOS is the only validated path.** The dashboard, CLI, and ordinary tests also start on Linux. The Podman steps and host-browser checks are written for one Mac, and the Linux path is unvalidated. Nothing here is a hosted demo, and this repository has no outside-user counts to report.
+
+Checked from a fresh clone on a Mac, without a swarm:
+
+```sh
+bun install --frozen-lockfile
+bun run typecheck
+bun run build
+bun test
+bun tooling/budget-probe.ts plan opus48
+```
+
+`typecheck` and `build` completed. `bun test` reported 272 pass, 36 skip, 0 fail. The skips are the installed-browser dashboard suite and the real rootless Podman suite. Skipped container tests are not evidence of containment. `budget-probe.ts plan` prints the two-peer Opus spec and `"paidRequests": false`. It does not send a model request.
+
+Not checked, and not claimed:
+
+- **No swarm was launched.** `bun run doctor` exited 1 because `localhost/simpleswarm-sandbox:1` is not built. `podman machine list` showed `podman-machine-default` running, then `podman images` failed with an overlay `readlink` error and `podman build` of that image failed with `faccessat ... connection refused`. Pi login was not completed. Do not read the screenshots as a launch that worked on this machine.
+- **No Pi version and no spend total are asserted here.** The lockfile pins `@earendil-works/pi-coding-agent` (this checkout installed 0.87.1). Reservation math lives in [`modules/runtime/pricing.ts`](modules/runtime/pricing.ts): GPT-5.5 at High returns a fixed ceiling, and Opus at High is a base plus a per-output-token term. Historical run charges, where they exist, are in the validation notes, not restated as a new measurement.
+- **A launch still costs money** once doctor is actually ready. It bills the account you logged into Pi. The ceiling bounds admission. It does not set the provider's invoice.
 
 ## Getting started
+
+You need [Bun](https://bun.sh). [Podman](https://podman.io) with a rootless machine is required before any sandboxed command. `just` only shortcuts recipes.
 
 ```sh
 git clone https://github.com/T-Py-T/SwarmSpindle.git
@@ -43,42 +65,43 @@ cd SwarmSpindle
 bun install --frozen-lockfile
 ```
 
-Next, bring up a rootless Podman machine and build the sandbox image. Image construction needs network access; the finished image does not get any.
+Build the sandbox only when the rootless connection accepts a build. Image construction needs network; finished commands use `--network=none`.
 
 ```sh
-podman machine init     # skip if you already have one
 podman machine start
-just sandbox-build      # or run the podman build command from the operations guide
+just sandbox-build
+# or: podman --connection "${SWARM_PODMAN_CONNECTION:-podman-machine-default}" \
+#       build --tag localhost/simpleswarm-sandbox:1 --file tooling/sandbox/Dockerfile .
 ```
 
-If your rootless connection is not named `podman-machine-default`, export `SWARM_PODMAN_CONNECTION` in every terminal that runs the worker, `doctor`, or a sandbox command. The [operations guide](docs/OPERATIONS.md#prepare-the-mac) covers the connection checks in full.
+If the connection is not `podman-machine-default`, export `SWARM_PODMAN_CONNECTION` for the worker, `doctor`, and sandbox commands. [Prepare the Mac](docs/OPERATIONS.md#prepare-the-mac) is the longer checklist.
 
-Then log in to Pi with the repository's own pinned copy of the CLI. **This step needs your own provider account** — enter `/login`, finish the provider's flow, and leave without sending a task.
+Log in with the pinned Pi CLI and your own provider account. Leave without sending a task:
 
 ```sh
 bun run ./node_modules/@earendil-works/pi-coding-agent/dist/cli.js
 ```
 
-Check that the machine is actually ready. `doctor` reports the sandbox, the rootless engine, the image, and each of the two exact models separately, and exits nonzero if a model is unavailable. A passing check sends no inference, so it confirms access rather than remaining quota.
+Two models are allowed, both at High reasoning, and neither is substituted: `claude-opus-4-8` through Pi's Anthropic provider, and `gpt-5.5` through Pi's OpenAI Codex provider.
 
 ```sh
 bun run doctor
 ```
 
-Finally, start the two processes in separate terminals and open the dashboard:
+`doctor` must report the sandbox and both models ready before a launch means anything. A passing check sends no inference. It does not report remaining quota.
+
+Then, in two terminals:
 
 ```sh
-bun run web      # terminal 1
-bun run worker   # terminal 2
+bun run web      # http://127.0.0.1:5178
+bun run worker
 ```
 
-Open <http://127.0.0.1:5178> — use the numeric loopback address, because the service validates its Host header. Artifact previews are served separately on port 5179. Opening `apps/web/index.html` as a file will not work; it cannot reach the API.
+Use the numeric loopback address. The service checks the Host header. Previews are on port 5179. Opening `apps/web/index.html` as a file does not reach the API. An empty run list means this database has no runs. Test databases never show up in the live queue.
 
-A connected dashboard reports the worker count. An empty run list simply means this database has no submitted runs yet; test fixtures use their own isolated databases and never appear in the live queue.
+### A task, once doctor is ready
 
-## A real example
-
-Save this as `tree-prompt.md`. The CLI expects a `Final output:` line and a `## Definition of Done` heading, and treats everything after that heading as the criteria.
+The CLI wants a `Final output:` line and a `## Definition of Done` heading. Everything after that heading is the criteria.
 
 ```markdown
 # Draw a tree
@@ -93,17 +116,11 @@ Create a self-contained SVG of a tree. Coordinate illustration and review.
 - A peer checks the illustration and records the result in a thread.
 ```
 
-With the worker running, start two Opus peers under a $6 shared ceiling and a $0.25 working target:
-
 ```sh
 bun run swarm 2 opus48 6 ./tree-prompt.md --working-target 0.25
 ```
 
-The command prints a dashboard link straight to the run. Open **MESSAGE BOARD** to follow the conversation, post a correction if the peers are heading the wrong way, and open **FILES & CLAIMS** to look at the artifact itself and its revisions. The same defaults — two agents, a $0.25 target, a $6 ceiling — are prefilled in the dashboard's own launch form, so you never have to touch the CLI.
-
-![A run's message board, showing the shared conversation beside the run's verified spending and held capacity](docs/images/message-board.png)
-
-To inspect, stop, or keep a run:
+That asks for two Opus peers, a $6 shared ceiling, and a $0.25 working target. The same defaults are prefilled on the dashboard form. The command prints a link to the run. This README did not run it.
 
 ```sh
 bun run swarm status SWARM_ID
@@ -111,43 +128,28 @@ bun run swarm stop SWARM_ID
 bun run swarm export SWARM_ID ./tree-export
 ```
 
-An export destination must be new. It contains `workspace/` with the current file versions, `receipt.json` with the run, threads, claims, reservations, and file metadata, and `trace.jsonl` with the ordered event stream. Exports can contain private task content — review before publishing. The [first-experiment guide](docs/TRY_IT.md) adds a budget-awareness probe and the reference-seeding options.
+The export directory must be new. It contains `workspace/`, `receipt.json`, and `trace.jsonl`. Exports can hold private task text. Review them before you publish. The [first-experiment guide](docs/TRY_IT.md) adds the unpaid plan you can print first, and the paid `launch` you should not confuse with it.
 
-## What a run can spend
-
-Each run has one shared **hard ceiling** and, optionally, a lower **working target**. The ceiling governs admission: before every model request the runtime reserves that request's conservative maximum cost, and a response either settles to verified usage or keeps its reservation as unresolved liability and closes the run to further requests. Agents cannot talk their way past that guard by ignoring it. The working target is softer: it stops *new* requests once settled usage reaches it, but requests already in flight may finish above it.
-
-Reservations are deliberately pessimistic, and that shapes which experiments can even start. At current defaults an Opus attempt reserves $5.40 and a Codex attempt $16.26 — which is why GPT-5.5 needs at least $16.26 of ceiling for a single request. Prices are frozen in [`modules/runtime/pricing.ts`](modules/runtime/pricing.ts) and the reasoning behind them is in the [pricing notes](docs/research/pricing.md).
-
-Agents are also given a `budget` tool and told to consult it before starting work, before expensive verification, and before finishing. It returns the shared target remainder, verified spending, requests in flight, unresolved usage, the reservation the next request needs, and a decision such as ready, waiting, or target reached. Because every reading is recorded immutably, an agent's claim about its own budget is checkable.
-
-![The stop view for a run, showing each peer's stop code and its budget at the moment it stopped](docs/images/why-it-stopped.png)
+The working target stops new requests once settled usage reaches it. Requests already in flight may finish above it. The hard ceiling is the admission guard. There is no automatic resume: a replacement is a new run with a new budget.
 
 ## How it is put together
 
-A Bun and TypeScript monorepo. Three modules own the parts where mistakes would be expensive, and three apps keep the operator surfaces apart.
+Bun and TypeScript. Three modules hold the state that must not be wrong. Three apps keep the surfaces apart.
 
 | Path | Responsibility |
 | --- | --- |
-| [`modules/swarm`](modules/swarm) | SQLite-backed run lifecycle, file claims, versioned contents, messages, and budget reservations. |
-| [`modules/sandbox`](modules/sandbox) | Runs commands in a rootless, network-disabled Podman workspace and returns validated changesets. |
-| [`modules/runtime`](modules/runtime) | Starts the allowed Pi sessions, applies budget admission, and records model and tool events. |
-| [`apps/web`](apps/web) · [`apps/worker`](apps/worker) · [`apps/cli`](apps/cli) | The dashboard, the queue worker, and the operator CLI, as separate processes. |
+| [`modules/swarm`](modules/swarm) | SQLite lifecycle, claims, revisions, messages, reservations |
+| [`modules/sandbox`](modules/sandbox) | Rootless, network-disabled Podman, validated changesets |
+| [`modules/runtime`](modules/runtime) | Pi sessions, budget admission, model and tool events |
+| [`apps/web`](apps/web), [`apps/worker`](apps/worker), [`apps/cli`](apps/cli) | Dashboard, queue, operator CLI |
 
-The [architecture notes](docs/ARCHITECTURE.md) set out the ownership rules in detail, and [operations](docs/OPERATIONS.md) separates unit tests from container checks and live-model evidence.
+Details: [architecture](docs/ARCHITECTURE.md), [operations](docs/OPERATIONS.md).
 
-## What it is not
-
-Worth knowing before you invest an evening in it:
-
-- **Local and single-operator.** The services bind to loopback and are not configured or hardened for remote or multi-user access.
-- **No hosted demo, no outside users.** The screenshots above come from runs on the maintainer's own machine, and running it yourself is the only way to see it live. This is an independent experiment, so there are no third-party users, customers, or usage numbers to report.
-- **An agent saying "done" is a claim, not acceptance.** The dashboard keeps those separate on purpose. The honest scoreboard: neither original 30-agent challenge met its definition of done, a later two-peer Pelican run completed with a reviewed artifact at $6.12 of verified usage, and the paired Canvas run published working HTML before a connection reset stopped its verification and left $5.40 of unresolved liability. The [challenge results](docs/validation/acceptance.md) and [budget lessons](docs/validation/swarm-budget-feedback.md#larger-claude-challenge-results) keep the full record.
-- **No automatic resume.** An interrupted run stays interrupted and inspectable. Starting a replacement is a new run with a new budget; it does not cancel charges from the original.
+The services bind to loopback. They are not hardened for remote or multi-user use. An agent saying "done" is a claim. The dashboard keeps that separate from acceptance. Neither original 30-agent challenge met its definition of done; later smaller runs are in the [acceptance record](docs/validation/acceptance.md) and the [budget lessons](docs/validation/swarm-budget-feedback.md#larger-claude-challenge-results), with their failures left in the record.
 
 ## Contributing
 
-Bug reports, fixes, and documentation corrections are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the full expectations; the short version is one concern per pull request, no credentials or exported run data in the diff, and these checks passing from the repository root:
+Bug fixes and doc corrections are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) asks for one concern per pull request, and no credentials or exported run data in the diff. From a clean install:
 
 ```sh
 bun run typecheck
@@ -155,14 +157,12 @@ bun run build
 bun test
 ```
 
-Container and host-browser suites are opt-in behind environment flags, since they need a ready rootless engine or an installed browser. See [verify changes and troubleshoot](docs/OPERATIONS.md#verify-changes-and-troubleshoot) for those, [SUPPORT.md](SUPPORT.md) for how to ask a question, and [SECURITY.md](SECURITY.md) for reporting a vulnerability privately. Open questions the project has not answered yet are collected in [open problems](docs/OPEN_PROBLEMS.md).
+Container and host-browser suites stay behind environment flags. See [verify changes](docs/OPERATIONS.md#verify-changes-and-troubleshoot). Questions: [SUPPORT.md](SUPPORT.md). Private vulnerability reports: [SECURITY.md](SECURITY.md). Open questions: [docs/OPEN_PROBLEMS.md](docs/OPEN_PROBLEMS.md).
 
-## Documentation
+More reading: [dashboard overview](docs/OVERVIEW.md) · [try a run](docs/TRY_IT.md) · [design](docs/DESIGN.md) · [roadmap](ROADMAP.md) · [validation index](docs/validation/requirements.md) · [docs index](docs/README.md)
 
-[Overview of the dashboard](docs/OVERVIEW.md) · [Try your first run](docs/TRY_IT.md) · [Operations and troubleshooting](docs/OPERATIONS.md) · [Architecture](docs/ARCHITECTURE.md) · [Design notes](docs/DESIGN.md) · [Roadmap](ROADMAP.md) · [Open problems](docs/OPEN_PROBLEMS.md) · [Validation records](docs/validation/requirements.md) · [Documentation index](docs/README.md)
+## License
 
-## License and attribution
+Project code is [MIT](LICENSE). Attribution boundaries are in [NOTICE.md](NOTICE.md). People: [AUTHORS.md](AUTHORS.md), [MAINTAINERS.md](MAINTAINERS.md). Third-party provenance: [docs/research/public-sources.md](docs/research/public-sources.md).
 
-Project code is **[MIT](LICENSE)** licensed. See [NOTICE.md](NOTICE.md) for attribution boundaries, [AUTHORS.md](AUTHORS.md) and [MAINTAINERS.md](MAINTAINERS.md) for the people, and [docs/research/public-sources.md](docs/research/public-sources.md) for third-party provenance.
-
-SwarmSpindle is an independent research experiment exploring agent collaboration, built after watching [IndyDevDan's demo](https://www.youtube.com/watch?v=S2sjyokoxeE) and attempting to reach the results it shows. It is not affiliated with, sponsored by, endorsed by, or an official product of IndyDevDan or his associated entities. References are solely for identification and attribution, and similarities in functionality or presentation do not imply common authorship, affiliation, or endorsement. No ownership of third-party intellectual property is claimed; all third-party rights remain with their holders. The MIT license covers project-authored code and does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
+SwarmSpindle is an independent experiment, built after watching [IndyDevDan's demo](https://www.youtube.com/watch?v=S2sjyokoxeE) and trying to reach the results it shows. It is not affiliated with, sponsored by, endorsed by, or an official product of IndyDevDan or his associated entities. References are for identification and attribution only. No ownership of third-party intellectual property is claimed. The MIT license covers project-authored code and does not grant rights to third-party material beyond its [applicable licenses](docs/research/public-sources.md).
