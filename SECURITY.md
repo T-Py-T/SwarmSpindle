@@ -1,11 +1,5 @@
 # Security policy
 
-> Tip-cite: `c0472986 PR#30`; this is a provenance pointer only, not approval, and never a `READY` claim.
-
-## Readiness boundary
-
-This policy is documentation, not a score, approval, or release certification. Nothing here claims `READY`; a vulnerability report, remediation, or local check is not a security approval and does not make this project or any artifact `READY`.
-
 ## Supported code
 
 The current `main` branch is the only supported version. SwarmSpindle is a local Bun and Pi swarm workspace; it does not operate a hosted service.
@@ -23,7 +17,7 @@ Include the affected commit, the vulnerable path, the impact, and the smallest r
 ## Keep reports and evidence safe
 
 - Do not send or commit API keys, Pi credentials, provider tokens, authentication seeds, spend ledgers with secrets, or personal data.
-- Do not attach unredacted agent transcripts, Podman sandbox contents, raw SQLite databases, or host-specific evidence packets.
+- Do not attach unredacted swarm transcripts, Podman sandbox contents, raw SQLite databases, or host-specific evidence packets.
 - Use synthetic prompts, credentials, and local fixtures when reproducing execution defects.
 - Treat captured third-party output under its original license and terms.
 
