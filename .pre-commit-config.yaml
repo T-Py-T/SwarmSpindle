@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: trailing-whitespace
+        stages: [manual]
+      - id: end-of-file-fixer
+        stages: [manual]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.22.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: bun-typecheck
+        name: Typecheck (bun)
+        entry: bun run typecheck
+        language: system
+        pass_filenames: false
