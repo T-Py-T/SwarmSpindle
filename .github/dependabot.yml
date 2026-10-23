@@ -10,30 +10,54 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /modules/runtime
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /modules/sandbox
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /modules/swarm
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: docker
     directory: /tooling/sandbox
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      docker:
+        patterns:
+          - "*"
