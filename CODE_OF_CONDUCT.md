@@ -1,7 +1,5 @@
 # Code of Conduct
 
-> Tip-cite: `a1aa2e7d PR#29`; this is a provenance pointer only, not approval, and never a `READY` claim.
-
 ## Our standard
 
 We want SwarmSpindle discussions and contributions to be welcoming, respectful,
@@ -28,7 +26,3 @@ Report a concern privately to [tnt850910@aol.com](mailto:tnt850910@aol.com).
 Include enough context to investigate, but do not send credentials, private
 configuration, or unredacted run exports. Maintainers may remove harmful
 content, limit participation, or take other action appropriate to the report.
-
-This document sets community expectations only. It is not a score, approval,
-release certification, or readiness decision; blocked or untested work is never
-`READY`.

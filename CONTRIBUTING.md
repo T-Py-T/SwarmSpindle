@@ -1,7 +1,5 @@
 # Contributing
 
-> **Tip-cite bank:** base main `4e54343a` + ship 235 (SECURITY/CONTRIBUTING lean). Resolve to `<8-char-merge-tip> PR#<number>` after merge. Provenance pointer only; never `READY`.
-
 Thanks for helping improve SwarmSpindle. The project runs local agent swarms
 with a web dashboard and a worker, so changes should preserve clear operator
 boundaries, reproducible checks, and evidence for claimed behavior.
@@ -49,19 +47,12 @@ Microsoft Edge is installed:
 SIMPLESWARM_BROWSER_INTEGRATION=1 bun test tests/browser.test.ts
 ```
 
-## Tip-cites and open problems
-
-For every ship handoff, including a docs-only refresh, record the first eight
-hexadecimal characters of the base `main` tip together with the pull-request
-number: `<8-char-main-tip> PR#<number>`. A documentation update alone does not
-establish acceptance or readiness.
-After merge, the Steward resolves that pointer against the new `main` tip. A
-tip-cite tracks provenance; it is not approval and never implies `READY`.
+## Open problems
 
 Keep unresolved acceptance, provider, budget, fidelity, and administration
 questions in the [open-problems inventory](docs/OPEN_PROBLEMS.md). Link the
-authoritative receipt or artifact for any changed evidence; do not turn a docs
-update or a passing check into a score or readiness claim.
+receipt or artifact for any changed evidence, and describe results exactly as
+measured.
 
 ## Pull requests
 
